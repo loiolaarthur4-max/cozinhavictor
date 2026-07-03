@@ -13,6 +13,7 @@ cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)
 cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
+# --- FUNÇÕES ---
 def para_float(valor):
     try: return float(valor)
     except: return 0.0
@@ -20,6 +21,21 @@ def para_float(valor):
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
     return [{"id": l[0], "nome": l[1] or "", "local": l[2] or "", "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4] or "", "quantidade": para_float(l[5]), "peso": para_float(l[6]), "unidade": l[7] or ""} for l in cursor.fetchall()]
+
+def renderizar_card(item):
+    dias = (item["validade"] - date.today()).days
+    cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
+    p = item['peso']
+    peso_txt = f"{int(p) if p.is_integer() else p} {item['unidade']}"
+    
+    st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
+        <b>{item["nome"]}</b> | <b>Marca:</b> {item["marca"]} | <b>Peso:</b> {peso_txt} | 📅 {dias} dias</div>''', unsafe_allow_html=True)
+    
+    c1, c2 = st.columns([1, 1])
+    if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
+    if c2.button("❌", key=f"d_{item['id']}"): 
+        cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],))
+        conn.commit(); st.rerun()
 
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
@@ -55,18 +71,14 @@ st.header("🚨 Estoque")
 busca = st.text_input("🔍 Pesquisar produtos...", placeholder="Digite o nome do produto...")
 produtos = carregar_produtos()
 
-# Filtro de lista
 if busca:
-    lista_exibir = [p for p in produtos if busca.lower() in p['nome'].lower()]
+    for item in [p for p in produtos if busca.lower() in p['nome'].lower()]:
+        renderizar_card(item)
 else:
-    lista_exibir = produtos
-
-# Renderização
-if not busca:
     abas = st.tabs(locais + ["📜 Histórico"])
     for i, local in enumerate(locais):
         with abas[i]:
-            for item in [p for p in lista_exibir if p['local'] == local]:
+            for item in [p for p in produtos if p['local'] == local]:
                 renderizar_card(item)
     
     with abas[-1]:
@@ -79,21 +91,3 @@ if not busca:
             st.write("### Marcas")
             cursor.execute("SELECT nome FROM historico_marcas")
             for r in cursor.fetchall(): st.code(r[0])
-else:
-    for item in lista_exibir:
-        renderizar_card(item)
-
-# Função auxiliar de renderização para evitar repetição
-def renderizar_card(item):
-    dias = (item["validade"] - date.today()).days
-    cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
-    p = item['peso']
-    # Exibe como inteiro se for, senão como float
-    peso_txt = f"{int(p) if p.is_integer() else p} {item['unidade']}"
-    
-    st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-        <b>{item["nome"]}</b> | <b>Marca:</b> {item["marca"]} | <b>Peso:</b> {peso_txt} | 📅 {dias} dias</div>''', unsafe_allow_html=True)
-    
-    c1, c2 = st.columns([1, 1])
-    if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
-    if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
