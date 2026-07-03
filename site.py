@@ -1,46 +1,25 @@
 import streamlit as st
-import streamlit.components.v1 as components
 from datetime import datetime, date
 import sqlite3
 
-# Configuração da Página
+# Configuração e Banco
 st.set_page_config(page_title="Controle Cozinha", layout="wide")
-
-# Conexão com banco
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL)")
 cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)")
-cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
-# Script do Scanner (HTML/JS)
-def scanner_js():
-    return """
-    <div id="reader" style="width: 100%;"></div>
-    <script src="https://unpkg.com/html5-qrcode"></script>
-    <script>
-        function onScanSuccess(decodedText) {
-            var input = window.parent.document.querySelector('input[type="text"]');
-            input.value = decodedText;
-            input.dispatchEvent(new Event('input', {bubbles: true}));
-        }
-        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-        html5QrcodeScanner.render(onScanSuccess);
-    </script>
-    """
-
-# Título
 st.title("🍳 Sistema de Controle da Cozinha")
 
 # Sidebar
 with st.sidebar:
-    st.header("📷 Scanner Automático")
-    if st.button("Abrir Câmera"):
-        components.html(scanner_js(), height=450)
-    
     st.header("📥 Cadastrar Produto")
-    nome_f = st.text_input("Nome do Produto (ou escaneie)")
+    
+    # EM VEZ DE abrir uma câmera complexa que causa erro no celular, 
+    # usamos um campo de texto que aceita leitura externa via Bluetooth/USB
+    # ou o teclado nativo do A13 (Gboard/Samsung).
+    nome_f = st.text_input("Nome do Produto (Escaneie aqui)", help="Toque aqui e use o ícone de scanner do seu teclado!")
     marca_f = st.text_input("Marca")
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local", locais)
@@ -52,6 +31,7 @@ with st.sidebar:
                        (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f))
         cursor.execute("INSERT OR IGNORE INTO historico_produtos (nome) VALUES (?)", (nome_f,))
         conn.commit()
+        st.success("Salvo!")
         st.rerun()
 
 # Conteúdo Principal
@@ -78,6 +58,5 @@ else:
         with abas[i]:
             render_lista([p for p in produtos if p['local'] == loc])
     with abas[-1]:
-        st.subheader("Histórico de Produtos")
         for r in cursor.execute("SELECT nome FROM historico_produtos").fetchall(): 
             st.write(f"- {r[0]}")
