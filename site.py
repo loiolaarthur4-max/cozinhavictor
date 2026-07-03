@@ -9,12 +9,17 @@ st.write("Sistema permanente ativo. Aguardando comandos do cozinheiro **Victor**
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Tabelas
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
 cursor.execute("CREATE TABLE IF NOT EXISTS historico (id INTEGER PRIMARY KEY AUTOINCREMENT, item_nome TEXT UNIQUE, item_marca TEXT UNIQUE)")
 conn.commit()
 
-# Funções
+# Função de segurança para números
+def forcar_float(valor):
+    try:
+        return float(valor)
+    except:
+        return 0.0
+
 def get_historico(tipo):
     cursor.execute(f"SELECT item_{tipo} FROM historico WHERE item_{tipo} IS NOT NULL AND item_{tipo} != ''")
     return [l[0] for l in cursor.fetchall()]
@@ -23,7 +28,6 @@ def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
     return [{"id": l[0], "nome": l[1], "local": l[2], "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4], "quantidade": l[5], "peso": l[6], "unidade": l[7]} for l in cursor.fetchall()]
 
-# Estado de Edição
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
 col1, col2 = st.columns([1.2, 1.8])
@@ -33,35 +37,27 @@ with col1:
     st.header("✏️ Editar Produto" if is_editing else "📥 Cadastrar Produto")
     d = st.session_state.edit_data if is_editing else {}
     
-    # Nomes
     st.subheader("Nome do Produto")
-    nome_hist = st.selectbox("Histórico (Nome)", [""] + get_historico("nome"), key="sel_n")
-    nome_input = st.text_input("Novo Nome", value=d.get("nome", ""))
-    nome_final = nome_input if nome_input else nome_hist
+    sel_nome = st.selectbox("Histórico (Nome)", [""] + get_historico("nome"), key="sel_n")
+    nome_input = st.text_input("Ou novo nome:", value=d.get("nome", ""))
+    nome_final = nome_input if nome_input else sel_nome
     
-    # Marcas
     st.subheader("Marca")
-    marca_hist = st.selectbox("Histórico (Marca)", [""] + get_historico("marca"), key="sel_m")
-    marca_input = st.text_input("Nova Marca", value=d.get("marca", ""))
-    marca_final = marca_input if marca_input else marca_hist
+    sel_marca = st.selectbox("Histórico (Marca)", [""] + get_historico("marca"), key="sel_m")
+    marca_input = st.text_input("Ou nova marca:", value=d.get("marca", ""))
+    marca_final = marca_input if marca_input else sel_marca
     
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local", locais, index=locais.index(d["local"]) if is_editing and d.get("local") in locais else 0)
     
-    # Tratamento super seguro para números
-    qtd_raw = d.get("quantidade")
-    qtd_val = float(qtd_raw) if (is_editing and qtd_raw is not None) else 1.0
-    qtd_f = st.number_input("Quantidade", value=qtd_val)
+    # Inputs numéricos usando a função de segurança
+    qtd_f = st.number_input("Quantidade", value=forcar_float(d.get("quantidade", 1.0)))
     
     unidades = ["Kg", "g", "L", "mL"]
-    unid_atual = d.get("unidade")
-    unid_idx = unidades.index(unid_atual) if (is_editing and unid_atual in unidades) else 0
+    unid_idx = unidades.index(d.get("unidade", "Kg")) if is_editing and d.get("unidade") in unidades else 0
     unid_f = st.selectbox("Unidade", unidades, index=unid_idx)
     
-    peso_raw = d.get("peso")
-    peso_val = float(peso_raw) if (is_editing and peso_raw is not None) else 0.0
-    peso_f = st.number_input("Peso/Volume", value=peso_val)
-    
+    peso_f = st.number_input("Peso/Volume", value=forcar_float(d.get("peso", 0.0)))
     data_f = st.date_input("Validade", value=d.get("validade", date.today()))
 
     if is_editing:
@@ -97,6 +93,7 @@ with col2:
                     <b>{item["nome"]}</b> ({item["marca"]})<br>
                     📦 {item["quantidade"]:.0f}x {item["peso"]}{item["unidade"]} | 📅 {item["validade"].strftime("%d/%m/%Y")} ({dias} dias)
                     </div>''', unsafe_allow_html=True)
+                
                 c_e, c_d = st.columns(2)
                 if c_e.button("✏️ Editar", key=f"e{item['id']}"):
                     st.session_state.edit_data = item
