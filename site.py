@@ -16,13 +16,21 @@ def para_float(valor):
     try: return float(valor) if valor is not None else 0.0
     except: return 0.0
 
-def carregar_historico(tabela):
+def get_historico(tabela):
     cursor.execute(f"SELECT nome FROM {tabela}")
     return [r[0] for r in cursor.fetchall()]
 
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
     return [{"id": l[0], "nome": l[1] or "", "local": l[2] or "", "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4] or "", "quantidade": l[5] or 0.0, "peso": l[6] or 0.0, "unidade": l[7] or ""} for l in cursor.fetchall()]
+
+# Função para criar input com histórico (datalist)
+def input_com_historico(label, key, valor_atual, opcoes):
+    options_html = "".join([f'<option value="{o}">' for o in opcoes])
+    st.markdown(f'<label>{label}</label><br><input list="{key}" value="{valor_atual}" style="width:100%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;" id="in_{key}">', unsafe_allow_html=True)
+    st.markdown(f'<datalist id="{key}">{options_html}</datalist>', unsafe_allow_html=True)
+    # Nota: Como o input acima é HTML puro, usamos um text_input invisível para pegar o valor no Streamlit
+    return st.text_input(label, value=valor_atual, key=key, label_visibility="collapsed")
 
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
@@ -33,12 +41,12 @@ with col1:
     st.header("✏️ Editar" if is_editing else "📥 Cadastrar")
     d = st.session_state.edit_data if is_editing else {}
 
-    # Campos com histórico (combobox)
-    produtos_hist = carregar_historico("historico_produtos")
-    marcas_hist = carregar_historico("historico_marcas")
+    nome_final = st.text_input("Nome do Produto", value=d.get("nome", ""))
+    # Mostra sugestões abaixo do input
+    st.caption("Sugestões: " + ", ".join(get_historico("historico_produtos")[:10]))
     
-    nome_final = st.selectbox("Nome do Produto", options=sorted(produtos_hist), index=None if not is_editing else (sorted(produtos_hist).index(d["nome"]) if d["nome"] in produtos_hist else None), editable=True)
-    marca_final = st.selectbox("Marca", options=sorted(marcas_hist), index=None if not is_editing else (sorted(marcas_hist).index(d["marca"]) if d["marca"] in marcas_hist else None), editable=True)
+    marca_final = st.text_input("Marca", value=d.get("marca", ""))
+    st.caption("Sugestões: " + ", ".join(get_historico("historico_marcas")[:10]))
     
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local", locais, index=locais.index(d["local"]) if is_editing and d.get("local") in locais else 0)
@@ -74,22 +82,18 @@ with col2:
     if busca:
         if st.button("⬅️ Sair da Pesquisa"): st.rerun()
         resultados = [p for p in produtos if busca.lower() in p['nome'].lower()]
-        st.subheader(f"Resultados ({len(resultados)})")
         for item in resultados:
-            dias = (item["validade"] - date.today()).days
-            cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
-            st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: #ffffff; border-radius: 8px; margin-bottom: 5px;">
+            cor = "#ef4444" if (item["validade"] - date.today()).days <= 3 else "#16a34a"
+            st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
                 <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} ({item["local"]})</div>''', unsafe_allow_html=True)
     else:
         abas = st.tabs(locais)
         for i, local in enumerate(locais):
             with abas[i]:
-                itens = [p for p in produtos if p['local'] == local]
-                for item in itens:
-                    dias = (item["validade"] - date.today()).days
-                    cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
-                    st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: #ffffff; border-radius: 8px; margin-bottom: 5px;">
-                        <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} | 📅 {item["validade"].strftime("%d/%m/%Y")}</div>''', unsafe_allow_html=True)
+                for item in [p for p in produtos if p['local'] == local]:
+                    cor = "#ef4444" if (item["validade"] - date.today()).days <= 3 else "#16a34a"
+                    st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
+                        <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]}</div>''', unsafe_allow_html=True)
                     c1, c2 = st.columns([1, 1])
                     if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
                     if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
