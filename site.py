@@ -63,7 +63,7 @@ def carregar_produtos():
             "id": linha[0],
             "nome": linha[1],
             "marca": marca_produto,
-            "local": Henry_loc_item := linha[3],
+            "local": linha[3], # LINHA CORRIGIDA (Removido por completo o Henry_loc_item :=)
             "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
             "quantidade": qtd_produto,
             "unidade": unidade_produto
@@ -145,7 +145,6 @@ with col1:
 
         local_peso = st.selectbox("Onde guardar?", ["Geladeira Principal (1)", "Freezer Branco", "Freezer Red Bull", "Freezer Grande"], key="loc_peso")
         
-        # Botão de seleção para Victor escolher se quer salvar em Kg ou g
         unidade_peso_escolhida = st.radio("Escolha a unidade de medida:", ["Kg", "g"], horizontal=True, key="escolha_unidade_peso")
         
         if unidade_peso_escolhida == "Kg":
@@ -158,7 +157,6 @@ with col1:
         if st.button("Adicionar Peso ao Estoque", key="btn_cad_peso"):
             if nome_final_peso:
                 data_texto = data_val_peso.strftime("%Y-%m-%d")
-                # AQUI ESTÁ CORRIGIDO: Salvando a unidade_peso_escolhida ("Kg" ou "g") direto no banco!
                 cursor.execute(
                     "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)", 
                     (nome_final_peso, marca_final_peso, local_peso, data_texto, qtd_peso, unidade_peso_escolhida)
