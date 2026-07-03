@@ -2,18 +2,19 @@ import streamlit as st
 from datetime import datetime, date
 import sqlite3
 
+# Configuração da página
 st.set_page_config(page_title="Controle de Validade", page_icon="🍳", layout="wide")
 st.title("🍳 Sistema de Controle da Cozinha")
 
 # Conexão
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
-# Mantemos o campo peso no SQL para não dar erro de estrutura, mas não o usaremos na interface
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
 cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)")
 cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
+# Funções
 def para_float(valor):
     try: return float(valor)
     except: return 0.0
@@ -26,7 +27,6 @@ def renderizar_card(item):
     dias = (item["validade"] - date.today()).days
     cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
     
-    # Exibe apenas Nome, Marca e Local
     st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
         <b>{item["nome"]}</b> | <b>Marca:</b> {item["marca"]} | <b>Local:</b> {item["local"]} | 📅 {dias} dias</div>''', unsafe_allow_html=True)
     
@@ -39,9 +39,10 @@ def renderizar_card(item):
         conn.commit()
         st.rerun()
 
+# Estado de edição
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
-# Sidebar (Cadastro Simplificado)
+# Sidebar (Cadastro e Edição)
 with st.sidebar:
     is_editing = st.session_state.edit_data is not None
     st.header("✏️ Editar" if is_editing else "📥 Cadastrar")
@@ -55,10 +56,13 @@ with st.sidebar:
     data_f = st.date_input("Validade", value=d.get("validade", date.today()))
 
     if is_editing:
-        if st.button("💾 Atualizar"):
-            # O peso é enviado como 0 para ignorar
-            cursor.execute("UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=?, peso=0 WHERE id=?", (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, d["id"]))
+        col_edit1, col_edit2 = st.columns(2)
+        if col_edit1.button("💾 Atualizar"):
+            cursor.execute("UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=? WHERE id=?", (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, d["id"]))
             conn.commit(); st.session_state.edit_data = None; st.rerun()
+        if col_edit2.button("❌ Cancelar"):
+            st.session_state.edit_data = None
+            st.rerun()
     else:
         if st.button("🚀 Salvar"):
             cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso) VALUES (?,?,?,?,?,0)", (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f))
