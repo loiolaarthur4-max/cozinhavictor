@@ -25,11 +25,12 @@ CREATE TABLE IF NOT EXISTS produtos (
 """)
 conn.commit()
 
-# 2. UPGRADES AUTOMÁTICOS DE COLUNAS
+# 2. UPGRADES AUTOMÁTICOS DE COLUNAS (Garante que todas as colunas necessárias existam)
 colunas_para_adicionar = [
     ("marca", "TEXT"),
-    ("quantidade", "REAL DEFAULT 1.0"),
-    ("unidade", "TEXT DEFAULT 'Unidades'")
+    ("quantidade", "REAL DEFAULT 1.0"),  # Quantidade de caixas/unidades
+    ("peso", "REAL DEFAULT 0.0"),        # Valor do peso
+    ("unidade", "TEXT DEFAULT 'Kg'")     # Se o peso é Kg ou g
 ]
 
 for coluna, tipo in colunas_para_adicionar:
@@ -51,13 +52,14 @@ conn.commit()
 
 # FUNÇÃO PARA CARREGAR PRODUTOS DO ESTOQUE
 def carregar_produtos():
-    cursor.execute("SELECT id, nome, marca, local, validade, quantidade, unidade FROM produtos")
+    cursor.execute("SELECT id, nome, marca, local, validade, quantidade, peso, unidade FROM produtos")
     linhas = cursor.fetchall()
     lista_produtos = []
-    for linha in linhas: # LINHA CORRIGIDA (Removido pipelines :=)
+    for linha in linhas:
         marca_produto = linha[2] if linha[2] else ""
         qtd_produto = linha[5] if (len(linha) > 5 and linha[5] is not None) else 1.0
-        unidade_produto = linha[6] if (len(linha) > 6 and linha[6]) else "Unidades"
+        peso_produto = linha[6] if (len(linha) > 6 and linha[6] is not None) else 0.0
+        unidade_produto = linha[7] if (len(linha) > 7 and linha[7]) else "Kg"
         
         lista_produtos.append({
             "id": linha[0],
@@ -66,6 +68,7 @@ def carregar_produtos():
             "local": linha[3],
             "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
             "quantidade": qtd_produto,
+            "peso": peso_produto,
             "unidade": unidade_produto
         })
     return lista_produtos
@@ -76,7 +79,7 @@ def carregar_historico_nomes():
 
 def carregar_historico_marcas():
     cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
-    return [linha[0] for linha in cursor.fetchall()]
+    return [linha[0] for linux in [1] for linha in cursor.fetchall()]
 
 if "produtos" not in st.session_state:
     st.session_state.produtos = carregar_produtos()
@@ -89,7 +92,7 @@ if "tempo_limpeza" not in st.session_state:
 # Divisão em duas colunas principais
 col1, col2 = st.columns([1.1, 1.7])
 
-# COLUNA 1: Painel de Cadastro Unificado
+# COLUNA 1: Cadastro Combinado (Unidade AND Peso)
 with col1:
     st.header("📥 Cadastrar Novo Produto")
     
@@ -108,43 +111,40 @@ with col1:
     local_armazenamento = st.selectbox("Onde guardar?", ["Geladeira Principal (1)", "Freezer Branco", "Freezer Red Bull", "Freezer Grande"], key="loc_prod")
     
     st.write("---")
-    st.subheader("Medida do Produto")
+    st.subheader("Medidas do Produto")
     
-    # Campo 1: Caixa de seleção da unidade de medida
-    unidade_selecionada = st.radio(
-        "Selecione o tipo de medida:", 
-        ["Unidades", "Kg", "g"], 
-        horizontal=True, 
-        key="tipo_unidade_medida"
-    )
+    # CAIXA 1: Quantidade de itens/volumes
+    qtd_itens = st.number_input("Quantidade de Unidades/Pacotes:", min_value=1.0, value=1.0, step=1.0, format="%.0f", key="input_qtd_geral")
     
-    # Campo 2: Caixa numérica dinâmica que se adapta à escolha
-    if unidade_selecionada == "Kg":
-        qtd_final = st.number_input("Digite o peso em Quilos (Ex: 1.50):", min_value=0.01, value=1.0, step=0.1, format="%.2f", key="input_kg")
-    elif unidade_selecionada == "g":
-        qtd_final = st.number_input("Digite o peso em Gramas (Ex: 500):", min_value=1.0, value=500.0, step=50.0, format="%.0f", key="input_g")
-    else:
-        qtd_final = st.number_input("Digite a quantidade de Unidades:", min_value=1.0, value=1.0, step=1.0, format="%.0f", key="input_uni")
+    # CAIXA 2: Seleção do tipo de peso e o valor do peso na mesma linha
+    c_tipo, c_valor = st.columns([1, 2])
+    with c_tipo:
+        tipo_peso = st.radio("Métrica:", ["Kg", "g"], horizontal=True, key="tipo_peso_sistema")
+    with c_valor:
+        if tipo_peso == "Kg":
+            peso_item = st.number_input("Peso por pacote (Kg):", min_value=0.0, value=0.0, step=0.1, format="%.2f", key="peso_kg")
+        else:
+            peso_item = st.number_input("Peso por pacote (g):", min_value=0.0, value=0.0, step=50.0, format="%.0f", key="peso_g")
         
     data_validade = st.date_input("Data de Validade:", min_value=date.today(), key="data_prod")
     
-    # Botão Único para Adicionar
+    # Botão para adicionar
     if st.button("🚀 Adicionar ao Estoque", use_container_width=True, key="btn_salvar_tudo"):
         if nome_final:
             data_texto = data_validade.strftime("%Y-%m-%d")
             cursor.execute(
-                "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)", 
-                (nome_final, marca_final, local_armazenamento, data_texto, qtd_final, unidade_selecionada)
+                "INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                (nome_final, marca_final, local_armazenamento, data_texto, qtd_itens, peso_item, tipo_peso)
             )
             cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final, marca_final))
             conn.commit()
             st.session_state.produtos = carregar_produtos()
-            st.success(f"🟢 {nome_final} ({qtd_final} {unidade_selecionada}) adicionado com sucesso!")
+            st.success(f"🟢 {nome_final} adicionado!")
             st.rerun()
         else:
             st.error("⚠️ Digite ou selecione o nome do produto.")
 
-# COLUNA 2: Painel de Estoque e Controles
+# COLUNA 2: Painel de Estoque e Visores
 with col2:
     st.header("🚨 Alarmes e Estoque Atual")
     
@@ -157,8 +157,8 @@ with col2:
             if st.button("🔄 DESFAZER AÇÃO ({0}s)".format(tempo_restante)):
                 for item in st.session_state.backup_produtos:
                     cursor.execute(
-                        "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)", 
-                        (item["nome"], item["marca"], item["local"], item["validade"].strftime("%Y-%m-%d"), item["quantidade"], item["unidade"])
+                        "INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                        (item["nome"], item["marca"], item["local"], item["validade"].strftime("%Y-%m-%d"), item["quantidade"], item["peso"], item["unidade"])
                     )
                 conn.commit()
                 st.session_state.produtos = carregar_produtos()
@@ -208,15 +208,18 @@ with col2:
             
             texto_marca = " ({0})".format(item['marca']) if item['marca'] else ""
             
-            unidade_card = item['unidade']
+            # Montagem do visor do estoque mostrando a Quantidade E o Peso combinados
             qtd_card = item['quantidade']
+            peso_card = item['peso']
+            unidade_card = item['unidade']
             
-            if unidade_card == "Kg":
-                texto_qtd = "{:.2f} Kg".format(qtd_card)
-            elif unidade_card == "g":
-                texto_qtd = "{:.0f} g".format(qtd_card)
+            if peso_card > 0:
+                if unidade_card == "Kg":
+                    texto_medida = "{:.0f} Unid. x {:.2f} Kg".format(qtd_card, peso_card)
+                else:
+                    texto_medida = "{:.0f} Unid. x {:.0f} g".format(qtd_card, peso_card)
             else:
-                texto_qtd = "{:.0f} Unid.".format(qtd_card)
+                texto_medida = "{:.0f} Unidades".format(qtd_card)
             
             card_col, control_col = st.columns([3.5, 1.5])
             
@@ -225,7 +228,7 @@ with col2:
                     '<div style="padding: 12px; border-radius: 8px; border-left: 6px solid ' + cor_alarme + '; '
                     'background-color: ' + cor_fundo + '; margin-bottom: 12px; color: #1e293b; font-family: sans-serif;">'
                     '<span style="font-size: 12pt; font-weight: bold;">' + str(item['nome']) + texto_marca + '</span> <br>'
-                    '<span style="font-size: 10.5pt; color: #0f172a;">📦 Estoque: <b>' + texto_qtd + '</b></span><br>'
+                    '<span style="font-size: 10.5pt; color: #0f172a;">📦 Estoque: <b>' + texto_medida + '</b></span><br>'
                     '<span style="font-size: 9.5pt;">📍 Local: <b>' + str(item['local']) + '</b> | Validade: ' + item['validade'].strftime('%d/%m/%Y') + '</span><br>'
                     '<span style="font-size: 10.5pt; font-weight: bold; color: ' + cor_alarme + ';">' + status_texto + '</span>'
                     '</div>'
@@ -236,11 +239,9 @@ with col2:
                 st.write("") 
                 c1, c2, c3 = st.columns([1, 1, 1])
                 
-                passo = 0.1 if unidade_card == "Kg" else (50.0 if unidade_card == "g" else 1.0)
-                
                 with c1:
                     if st.button("➖", key="sub_{0}".format(item['id'])):
-                        nova_qtd = qtd_card - passo
+                        nova_qtd = qtd_card - 1
                         if nova_qtd <= 0:
                             cursor.execute("DELETE FROM produtos WHERE id = ?", (item['id'],))
                         else:
@@ -251,7 +252,7 @@ with col2:
                         
                 with c2:
                     if st.button("➕", key="add_{0}".format(item['id'])):
-                        nova_qtd = qtd_card + passo
+                        nova_qtd = qtd_card + 1
                         cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, item['id']))
                         conn.commit()
                         st.session_state.produtos = carregar_produtos()
