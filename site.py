@@ -25,15 +25,14 @@ CREATE TABLE IF NOT EXISTS produtos (
 """)
 conn.commit()
 
-# 2. SISTEMA AUTOMÁTICO DE UPGRADE: Se a tabela for antiga, adiciona a coluna 'marca' sem quebrar nada
+# 2. Upgrade automático para adicionar a coluna 'marca' caso não exista
 try:
     cursor.execute("ALTER TABLE produtos ADD COLUMN marca TEXT")
     conn.commit()
 except sqlite3.OperationalError:
-    # Se der erro, significa que a coluna 'marca' já existe, então não faz nada!
     pass
 
-# 3. Cria a tabela separada para armazenar o histórico de sugestões
+# 3. Cria a tabela de histórico de sugestões
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS historico (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,27 +42,26 @@ CREATE TABLE IF NOT EXISTS historico (
 """)
 conn.commit()
 
-# FUNÇÃO PARA CARREGAR PRODUTOS DO ESTOQUE
+# FUNÇÃO PARA CARREGAR PRODUTOS DO ESTOQUE (Agora puxando o ID também)
 def carregar_produtos():
-    cursor.execute("SELECT nome, marca, local, validade FROM produtos")
+    cursor.execute("SELECT id, nome, marca, local, validade FROM produtos")
     linhas = cursor.fetchall()
     lista_produtos = []
     for linha in linhas:
-        marca_produto = linha[1] if linha[1] else ""
+        marca_produto = linha[2] if linha[2] else ""
         lista_produtos.append({
-            "nome": linha[0],
+            "id": linha[0], # Guardamos o ID numérico para saber quem deletar
+            "nome": linha[1],
             "marca": marca_produto,
-            "local": linha[2],
-            "validade": datetime.strptime(linha[3], "%Y-%m-%d").date()
+            "local": linha[3],
+            "validade": datetime.strptime(linha[4], "%Y-%m-%d").date()
         })
     return lista_produtos
 
-# FUNÇÃO PARA PEGAR OS NOMES JÁ CADASTRADOS NO HISTÓRICO
 def carregar_historico_nomes():
     cursor.execute("SELECT item_nome FROM historico ORDER BY item_nome ASC")
     return [linha[0] for linha in cursor.fetchall()]
 
-# FUNÇÃO PARA PEGAR AS MARCAS JÁ CADASTRADAS NO HISTÓRICO
 def carregar_historico_marcas():
     cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
     return [linha[0] for linha in cursor.fetchall()]
@@ -71,7 +69,6 @@ def carregar_historico_marcas():
 if "produtos" not in st.session_state:
     st.session_state.produtos = carregar_produtos()
 
-# Inicializa as variáveis da memória para o sistema de "Desfazer"
 if "backup_produtos" not in st.session_state:
     st.session_state.backup_produtos = None
 if "tempo_limpeza" not in st.session_state:
@@ -80,27 +77,18 @@ if "tempo_limpeza" not in st.session_state:
 # Divisão em duas colunas
 col1, col2 = st.columns([1, 2])
 
-# COLUNA 1: Formulário de Cadastro com Histórico Autocomplete
+# COLUNA 1: Formulário de Cadastro
 with col1:
     st.header("📥 Cadastrar Novo Produto")
     
     lista_sugestoes_nome = carregar_historico_nomes()
     lista_sugestoes_marca = carregar_historico_marcas()
     
-    nome = st.selectbox(
-        "Nome do Alimento / Bebida (Selecione do histórico):",
-        options=[""] + lista_sugestoes_nome,
-        index=0
-    )
-    
+    nome = st.selectbox("Nome do Alimento / Bebida (Selecione do histórico):", options=[""] + lista_sugestoes_nome, index=0)
     nome_novo = st.text_input("Ou digite um NOVO nome:")
     nome_final = nome_novo.strip() if nome_novo else nome
     
-    marca = st.selectbox(
-        "Marca do Produto (Selecione do histórico):",
-        options=[""] + lista_sugestoes_marca,
-        index=0
-    )
+    marca = st.selectbox("Marca do Produto (Selecione do histórico):", options=[""] + lista_sugestoes_marca, index=0)
     marca_nova = st.text_input("Ou digite uma NOVA marca:")
     marca_final = marca_nova.strip() if marca_nova else marca
 
@@ -116,17 +104,8 @@ with col1:
     if st.button("Adicionar ao Estoque"):
         if nome_final:
             data_texto = data_val.strftime("%Y-%m-%d")
-            
-            # Salva na tabela com a nova coluna incluída
-            cursor.execute(
-                "INSERT INTO produtos (nome, marca, local, validade) VALUES (?, ?, ?, ?)", 
-                (nome_final, marca_final, local, data_texto)
-            )
-            
-            cursor.execute(
-                "INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", 
-                (nome_final, marca_final)
-            )
+            cursor.execute("INSERT INTO produtos (nome, marca, local, validade) VALUES (?, ?, ?, ?)", (nome_final, marca_final, local, data_texto))
+            cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final, marca_final))
             conn.commit()
             
             st.session_state.produtos = carregar_produtos()
@@ -136,10 +115,11 @@ with col1:
         else:
             st.error("⚠️ Por favor, selecione ou digite o nome do produto.")
 
-# COLUNA 2: O painel de Alarmes Automáticos
+# COLUNA 2: O painel de Alarmes com Exclusão Individual
 with col2:
     st.header("🚨 Alarmes e Estoque Atual")
     
+    # LÓGICA DO BOTÃO DESFAZER (Para quando apagar TUDO)
     if st.session_state.backup_produtos is not None:
         tempo_passado = time.time() - st.session_state.tempo_limpeza
         tempo_restante = int(10 - tempo_passado)
@@ -148,16 +128,12 @@ with col2:
             st.warning("⚠️ Todo o estoque foi apagado!")
             if st.button("🔄 DESFAZER AÇÃO ({0}s)".format(tempo_restante)):
                 for item in st.session_state.backup_produtos:
-                    cursor.execute(
-                        "INSERT INTO produtos (nome, marca, local, validade) VALUES (?, ?, ?, ?)", 
-                        (item["nome"], item["marca"], item["local"], item["validade"].strftime("%Y-%m-%d"))
-                    )
+                    cursor.execute("INSERT INTO produtos (nome, marca, local, validade) VALUES (?, ?, ?, ?)", (item["nome"], item["marca"], item["local"], item["validade"].strftime("%Y-%m-%d")))
                 conn.commit()
                 st.session_state.produtos = carregar_produtos()
                 st.session_state.backup_produtos = None
                 st.success("✅ Estoque recuperado com sucesso!")
                 st.rerun()
-            
             time.sleep(1)
             st.rerun()
         else:
@@ -171,7 +147,6 @@ with col2:
         if st.button("🗑️ Limpar Todo o Estoque"):
             st.session_state.backup_produtos = st.session_state.produtos.copy()
             st.session_state.tempo_limpeza = time.time()
-            
             cursor.execute("DELETE FROM produtos")
             conn.commit()
             st.session_state.produtos = []
@@ -179,6 +154,7 @@ with col2:
             
         st.write("---")
         
+        # Lista os produtos criandos colunas menores para o botão de apagar
         for item in st.session_state.produtos:
             hoje = date.today()
             dias_restantes = (item["validade"] - hoje).days
@@ -202,12 +178,27 @@ with col2:
             
             texto_marca = " ({0})".format(item['marca']) if item['marca'] else ""
             
-            html_card = (
-                '<div style="padding: 12px; border-radius: 8px; border-left: 6px solid ' + cor_alarme + '; '
-                'background-color: ' + cor_fundo + '; margin-bottom: 12px; color: #1e293b; font-family: sans-serif;">'
-                '<span style="font-size: 12pt; font-weight: bold;">' + str(item['nome']) + texto_marca + '</span> <br>'
-                '<span style="font-size: 10pt;">📍 Local: <b>' + str(item['local']) + '</b> | Validade: ' + item['validade'].strftime('%d/%m/%Y') + '</span><br>'
-                '<span style="font-size: 10.5pt; font-weight: bold; color: ' + cor_alarme + ';">' + status_texto + '</span>'
-                '</div>'
-            )
-            st.html(html_card)
+            # Divide a linha do card em duas: 85% para o card e 15% para o botão de deletar
+            card_col, btn_col = st.columns([6, 1])
+            
+            with card_col:
+                html_card = (
+                    '<div style="padding: 12px; border-radius: 8px; border-left: 6px solid ' + cor_alarme + '; '
+                    'background-color: ' + cor_fundo + '; margin-bottom: 12px; color: #1e293b; font-family: sans-serif;">'
+                    '<span style="font-size: 12pt; font-weight: bold;">' + str(item['nome']) + texto_marca + '</span> <br>'
+                    '<span style="font-size: 10pt;">📍 Local: <b>' + str(item['local']) + '</b> | Validade: ' + item['validade'].strftime('%d/%m/%Y') + '</span><br>'
+                    '<span style="font-size: 10.5pt; font-weight: bold; color: ' + cor_alarme + ';">' + status_texto + '</span>'
+                    '</div>'
+                )
+                st.html(html_card)
+                
+            with btn_col:
+                # Cria um espaço vertical para alinhar o botão ao meio do card
+                st.write("")
+                # Botão de deletar individual usando o ID único do item no banco
+                if st.button("❌", key="del_{0}".format(item['id']), help="Remover apenas este produto"):
+                    cursor.execute("DELETE FROM produtos WHERE id = ?", (item['id'],))
+                    conn.commit()
+                    st.session_state.produtos = carregar_produtos()
+                    st.success("Removido!")
+                    st.rerun()
