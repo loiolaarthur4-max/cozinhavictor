@@ -6,7 +6,7 @@ import sqlite3
 st.set_page_config(page_title="Controle de Validade", page_icon="🍳", layout="wide")
 st.title("🍳 Sistema de Controle da Cozinha")
 
-# Conexão com banco
+# Conexão
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
@@ -14,7 +14,7 @@ cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)
 cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
-# Funções auxiliares
+# Funções
 def para_float(valor):
     try: return float(valor)
     except: return 0.0
@@ -27,12 +27,16 @@ def renderizar_card(item):
     dias = (item["validade"] - date.today()).days
     cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
     
-    # Formatação estrita para evitar o 0 extra
-    p = float(item['peso'])
-    peso_str = f"{int(p) if p.is_integer() else p} {item['unidade']}"
+    # Lógica rigorosa para o Peso
+    peso_val = float(item['peso'])
+    # Se for 0, deixa vazio para não aparecer na tela
+    if peso_val == 0:
+        peso_str = ""
+    else:
+        peso_str = f"| Peso: {int(peso_val) if peso_val.is_integer() else peso_val} {item['unidade']}"
     
     st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-        <b>{item["nome"]}</b> | <b>Marca:</b> {item["marca"]} | <b>Peso:</b> {peso_str} | 📅 {dias} dias</div>''', unsafe_allow_html=True)
+        <b>{item["nome"]}</b> | <b>Marca:</b> {item["marca"]} {peso_str} | 📅 {dias} dias</div>''', unsafe_allow_html=True)
     
     c1, c2 = st.columns([1, 1])
     if c1.button("✏️", key=f"e_{item['id']}"): 
@@ -43,10 +47,10 @@ def renderizar_card(item):
         conn.commit()
         st.rerun()
 
-# Estado de edição
+# Estado de Edição
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
-# Sidebar (Cadastro/Edição)
+# Sidebar
 with st.sidebar:
     is_editing = st.session_state.edit_data is not None
     st.header("✏️ Editar" if is_editing else "📥 Cadastrar")
@@ -56,10 +60,10 @@ with st.sidebar:
     marca_f = st.text_input("Marca", value=d.get("marca", ""))
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local", locais, index=locais.index(d.get("local", locais[0])) if is_editing and d.get("local") in locais else 0)
-    qtd_f = st.number_input("Quantidade (Embalagens)", value=para_float(d.get("quantidade", 1.0)), step=1.0)
+    qtd_f = st.number_input("Quantidade", value=para_float(d.get("quantidade", 1.0)), step=1.0)
     unidades = ["Kg", "g", "L", "mL"]
-    unid_f = st.selectbox("Unidade de Medida", unidades, index=unidades.index(d.get("unidade", "Kg")) if is_editing and d.get("unidade") in unidades else 0)
-    peso_f = st.number_input("Peso/Volume por unidade", value=para_float(d.get("peso", 0.0)), step=0.1)
+    unid_f = st.selectbox("Unidade", unidades, index=unidades.index(d.get("unidade", "Kg")) if is_editing and d.get("unidade") in unidades else 0)
+    peso_f = st.number_input("Peso/Volume", value=para_float(d.get("peso", 0.0)), step=0.1)
     data_f = st.date_input("Validade", value=d.get("validade", date.today()))
 
     if is_editing:
@@ -73,9 +77,9 @@ with st.sidebar:
             cursor.execute("INSERT OR IGNORE INTO historico_marcas (nome) VALUES (?)", (marca_f,))
             conn.commit(); st.rerun()
 
-# Estoque e Pesquisa
+# Conteúdo Principal
 st.header("🚨 Estoque")
-busca = st.text_input("🔍 Pesquisar produtos...", placeholder="Digite o nome...")
+busca = st.text_input("🔍 Pesquisar...", placeholder="Digite o nome...")
 produtos = carregar_produtos()
 
 if busca:
