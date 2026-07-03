@@ -18,21 +18,16 @@ def para_float(valor):
 
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
-    rows = cursor.fetchall()
     lista = []
-    for l in rows:
+    for l in cursor.fetchall():
         try:
             validade_dt = datetime.strptime(str(l[3]), "%Y-%m-%d").date()
         except:
             validade_dt = date.today()
         lista.append({
-            "id": l[0],
-            "nome": l[1] or "",
-            "local": l[2] or "",
-            "validade": validade_dt,
-            "marca": l[4] or "",
-            "quantidade": para_float(l[5]),
-            "peso": para_float(l[6]),
+            "id": l[0], "nome": l[1] or "", "local": l[2] or "", 
+            "validade": validade_dt, "marca": l[4] or "", 
+            "quantidade": para_float(l[5]), "peso": para_float(l[6]), 
             "unidade": str(l[7] or "").strip()
         })
     return lista
@@ -49,7 +44,7 @@ with col1:
     nome_f = st.text_input("Nome do Produto", value=d.get("nome", ""))
     marca_f = st.text_input("Marca", value=d.get("marca", ""))
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
-    local_f = st.selectbox("Local", locais, index=locais.index(d["local"]) if is_editing and d.get("local") in locais else 0)
+    local_f = st.selectbox("Local", locais, index=locais.index(d.get("local", locais[0])) if is_editing and d.get("local") in locais else 0)
     qtd_f = st.number_input("Quantidade", value=para_float(d.get("quantidade", 1.0)), step=0.1)
     unidades = ["Kg", "g", "L", "mL"]
     unid_f = st.selectbox("Unidade", unidades, index=unidades.index(d.get("unidade", "Kg")) if is_editing and d.get("unidade") in unidades else 0)
@@ -65,8 +60,6 @@ with col1:
     else:
         if st.button("🚀 Salvar"):
             cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?,?,?,?,?,?,?)", (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f))
-            cursor.execute("INSERT OR IGNORE INTO historico_produtos (nome) VALUES (?)", (nome_f,))
-            cursor.execute("INSERT OR IGNORE INTO historico_marcas (nome) VALUES (?)", (marca_f,))
             conn.commit(); st.rerun()
 
 with col2:
@@ -80,31 +73,18 @@ with col2:
                 dias = (item["validade"] - date.today()).days
                 cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
                 
-                # Formata peso para string sem decimais se for inteiro
-                peso_val = item['peso']
-                peso_display = int(peso_val) if peso_val.is_integer() else peso_val
+                # FORMATACAO RÍGIDA: se for 100.0 vira 100
+                v_peso = float(item['peso'])
+                exibir_peso = int(v_peso) if v_peso.is_integer() else v_peso
                 
-                # AQUI ESTÁ A CORREÇÃO: unsafe_allow_html=True
                 st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                    <b>{item["nome"]}</b> | 📅 {dias} dias | {peso_display} {item["unidade"]}</div>''', unsafe_allow_html=True)
+                    <b>{item["nome"]}</b> | {dias} dias | {exibir_peso} {item["unidade"]}</div>''', unsafe_allow_html=True)
                 
                 c1, c2 = st.columns([1, 1])
                 if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
                 if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
-        
+
     with abas[-1]:
-        h1, h2 = st.columns(2)
-        with h1:
-            st.write("**Produtos:**")
-            cursor.execute("SELECT nome FROM historico_produtos")
-            for r in cursor.fetchall():
-                c_c, c_d = st.columns([3, 1])
-                c_c.code(r[0]); 
-                if c_d.button("❌", key=f"del_p_{r[0]}"): cursor.execute("DELETE FROM historico_produtos WHERE nome=?", (r[0],)); conn.commit(); st.rerun()
-        with h2:
-            st.write("**Marcas:**")
-            cursor.execute("SELECT nome FROM historico_marcas")
-            for r in cursor.fetchall():
-                c_c, c_d = st.columns([3, 1])
-                c_c.code(r[0]); 
-                if c_d.button("❌", key=f"del_m_{r[0]}"): cursor.execute("DELETE FROM historico_marcas WHERE nome=?", (r[0],)); conn.commit(); st.rerun()
+        st.write("Histórico de nomes:")
+        cursor.execute("SELECT nome FROM historico_produtos")
+        for r in cursor.fetchall(): st.code(r[0])
