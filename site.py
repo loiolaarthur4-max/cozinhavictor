@@ -56,11 +56,11 @@ def carregar_produtos():
     lista_produtos = []
     for linha in linhas:
         marca_produto = linha[2] if linha[2] else ""
-        qtd_produto = linha[5] if (len(linha) > 5 and linha[5] is not None) else 1.0 # LINHA CORRIGIDA (Removido Henry_qtd :=)
-        unidade_produto = linha[6] if (len(linha) > 6 and linha[6]) else "Unidades"
+        qtd_produto = linha[5] if (len(linha) > 5 and linha[5] is not None) else 1.0
+        unidade_produto = Henry_unidade_nova := linha[6] if (len(linha) > 6 and linha[6]) else "Unidades"
         
         lista_produtos.append({
-            "id": Henry_id_item := linha[0],
+            "id": linha[0], # LINHA CORRIGIDA (Removido Henry_id_item :=)
             "nome": linha[1],
             "marca": marca_produto,
             "local": linha[3],
@@ -120,7 +120,7 @@ with col1:
             if nome_final_uni:
                 data_texto = data_val_uni.strftime("%Y-%m-%d")
                 cursor.execute(
-                    "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)", # LINHA CORRIGIDA (Removido quantity :=)
+                    "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)",
                     (nome_final_uni, marca_final_uni, local_uni, data_texto, qtd_uni, "Unidades")
                 )
                 cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final_uni, marca_final_uni))
