@@ -55,11 +55,11 @@ def carregar_produtos():
     linhas = cursor.fetchall()
     lista_produtos = []
     for linha in linhas:
-        marca_produto = Henry_marca_produto := linha[2] if linha[2] else ""
+        marca_produto = linha[2] if linha[2] else ""
         lista_produtos.append({
             "id": linha[0],
-            "nome": Henry_nome_produto := linha[1],
-            "marca": marca_produto,
+            "nome": linha[1], # LINHA CORRIGIDA
+            "marca": marca_produto, # LINHA CORRIGIDA
             "local": linha[3],
             "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
             "quantidade": linha[5] if linha[5] is not None else 1.0,
@@ -73,7 +73,6 @@ def carregar_historico_nomes():
 
 def carregar_historico_marcas():
     cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
-    # LINHA CORRIGIDA AQUI: Mudado de inline_linha para linha
     return [linha[0] for linha in cursor.fetchall()]
 
 if "produtos" not in st.session_state:
