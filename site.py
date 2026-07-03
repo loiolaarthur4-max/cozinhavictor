@@ -9,24 +9,19 @@ st.title("🍳 Sistema de Controle da Cozinha")
 # Conexão com Banco de Dados
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
-
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
 conn.commit()
 
-# Estilo CSS: Scroll interno sem caixa branca ou bordas chamativas
+# Estilo CSS para garantir que o scroll só apareça se necessário
 st.markdown("""
     <style>
-    .scroll-container {
-        height: 550px;
-        overflow-y: auto;
-        padding-right: 15px;
-    }
+    .item-card { padding: 10px; color: #ffffff; border-radius: 8px; margin-bottom: 8px; }
     </style>
 """, unsafe_allow_html=True)
 
 def para_float(valor):
     try: return float(valor)
-    except (ValueError, TypeError): return 0.0
+    except: return 0.0
 
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
@@ -52,14 +47,14 @@ with col1:
     data_f = st.date_input("Validade", value=d.get("validade", date.today()))
 
     if is_editing:
-        c_salvar, c_cancelar = st.columns(2)
-        if c_salvar.button("💾 Atualizar"):
+        c1, c2 = st.columns(2)
+        if c1.button("💾 Atualizar"):
             cursor.execute("UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=?, peso=?, unidade=? WHERE id=?", 
                            (nome_final, marca_final, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f, d["id"]))
             conn.commit()
             st.session_state.edit_data = None
             st.rerun()
-        if c_cancelar.button("❌ Cancelar"):
+        if c2.button("❌ Cancelar"):
             st.session_state.edit_data = None
             st.rerun()
     else:
@@ -78,14 +73,18 @@ with col2:
     for i, local in enumerate(locais):
         with abas[i]:
             itens = [p for p in produtos if p['local'] == local and (busca.lower() in p['nome'].lower())]
-            st.markdown('<div class="scroll-container">', unsafe_allow_html=True)
-            for item in itens:
-                dias = (item["validade"] - date.today()).days
-                color = "#000000" if dias < 0 else ("#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a"))
-                st.markdown(f'''<div style="padding: 10px; background-color: {color}; color: #ffffff; border-radius: 8px; margin-bottom: 8px;">
-                    <b>{item["nome"]}</b> ({item["marca"]}) | 📅 {item["validade"].strftime("%d/%m/%Y")} ({dias} dias)
-                    </div>''', unsafe_allow_html=True)
-                c1, c2 = st.columns([1, 1])
-                if c1.button("✏️ Editar", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
-                if c2.button("❌ Excluir", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+            
+            if not itens:
+                st.info("Nenhum produto encontrado neste local.")
+            else:
+                for item in itens:
+                    dias = (item["validade"] - date.today()).days
+                    cor = "#000000" if dias < 0 else ("#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a"))
+                    
+                    st.markdown(f'''<div class="item-card" style="background-color: {cor};">
+                        <b>{item["nome"]}</b> ({item["marca"]}) | 📅 {item["validade"].strftime("%d/%m/%Y")} ({dias} dias)
+                        </div>''', unsafe_allow_html=True)
+                    
+                    c1, c2 = st.columns([1, 1])
+                    if c1.button("✏️ Editar", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
+                    if c2.button("❌ Excluir", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
