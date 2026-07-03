@@ -5,6 +5,7 @@ import sqlite3
 st.set_page_config(page_title="Controle de Validade", page_icon="🍳", layout="wide")
 st.title("🍳 Sistema de Controle da Cozinha")
 
+# Conexão com Banco
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
@@ -13,7 +14,9 @@ cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
 def para_float(valor):
-    try: return float(valor) if valor is not None else 0.0
+    try:
+        if isinstance(valor, str): valor = valor.replace(',', '.')
+        return float(valor) if valor is not None else 0.0
     except: return 0.0
 
 def carregar_produtos():
@@ -24,6 +27,7 @@ if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
 col1, col2 = st.columns([1, 2])
 
+# COLUNA 1: FORMULÁRIO
 with col1:
     is_editing = st.session_state.edit_data is not None
     st.header("✏️ Editar" if is_editing else "📥 Cadastrar")
@@ -52,6 +56,7 @@ with col1:
             cursor.execute("INSERT OR IGNORE INTO historico_marcas (nome) VALUES (?)", (marca_final,))
             conn.commit(); st.rerun()
 
+# COLUNA 2: ESTOQUE E HISTÓRICO
 with col2:
     st.header("🚨 Estoque")
     busca = st.text_input("🔍 Pesquisar...", placeholder="Digite para filtrar...")
@@ -63,22 +68,23 @@ with col2:
             dias = (item["validade"] - date.today()).days
             cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
             st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                <b>{item["nome"]}</b> ({dias} dias p/ vencer) - {item["quantidade"]:g}{item["unidade"]}</div>''', unsafe_allow_html=True)
+                <b>{item["nome"]}</b> | 📅 {dias} dias p/ vencer | {item["peso"]:g} {item["unidade"]}</div>''', unsafe_allow_html=True)
     else:
         abas = st.tabs(locais + ["📜 Histórico"])
         for i, local in enumerate(locais):
             with abas[i]:
                 for item in [p for p in produtos if p['local'] == local]:
                     dias = (item["validade"] - date.today()).days
-                    # Vermelho p/ < 3, Laranja p/ < 7, Verde resto
                     cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
+                    # :g garante que 100.0 vire 100
                     st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                        <b>{item["nome"]}</b> | 📅 {dias} dias p/ vencer | {item["quantidade"]:g}{item["unidade"]}</div>''', unsafe_allow_html=True)
+                        <b>{item["nome"]}</b> | 📅 {dias} dias p/ vencer | {item["peso"]:g} {item["unidade"]}</div>''', unsafe_allow_html=True)
                     c1, c2 = st.columns([1, 1])
                     if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
                     if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
         
         with abas[-1]:
+            st.subheader("Registros Salvos")
             h1, h2 = st.columns(2)
             with h1:
                 st.write("**Produtos:**")
