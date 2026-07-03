@@ -17,7 +17,19 @@ def para_float(valor):
 
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
-    return [{"id": l[0], "nome": l[1], "local": l[2], "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4], "quantidade": l[5], "peso": l[6], "unidade": l[7]} for l in cursor.fetchall()]
+    dados = []
+    for l in cursor.fetchall():
+        dados.append({
+            "id": l[0], 
+            "nome": l[1] or "", 
+            "local": l[2] or "", 
+            "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), 
+            "marca": l[4] or "", 
+            "quantidade": para_float(l[5]), 
+            "peso": para_float(l[6]), # Força o peso a ser sempre float
+            "unidade": l[7] or ""
+        })
+    return dados
 
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
@@ -30,11 +42,10 @@ with st.sidebar:
     marca_f = st.text_input("Marca", value=d.get("marca", ""))
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local", locais, index=locais.index(d.get("local", locais[0])) if is_editing and d.get("local") in locais else 0)
-    qtd_f = st.number_input("Quantidade", value=float(d.get("quantidade", 1.0)), step=0.1)
+    qtd_f = st.number_input("Quantidade", value=para_float(d.get("quantidade", 1.0)), step=0.1)
     unidades = ["Kg", "g", "L", "mL"]
     unid_f = st.selectbox("Unidade", unidades, index=unidades.index(d.get("unidade", "Kg")) if is_editing and d.get("unidade") in unidades else 0)
-    # Valor padrão 0.0 para o campo, mas vamos ocultar se for 0 na exibição
-    peso_f = st.number_input("Peso/Volume", value=float(d.get("peso", 0.0)), step=0.1)
+    peso_f = st.number_input("Peso/Volume", value=para_float(d.get("peso", 0.0)), step=0.1)
     data_f = st.date_input("Validade", value=d.get("validade", date.today()))
 
     if is_editing:
@@ -47,7 +58,6 @@ with st.sidebar:
             cursor.execute("INSERT OR IGNORE INTO historico_produtos (nome) VALUES (?)", (nome_f,))
             conn.commit(); st.rerun()
 
-# Exibição
 produtos = carregar_produtos()
 abas = st.tabs(locais + ["📜 Histórico"])
 
@@ -57,17 +67,17 @@ for i, local in enumerate(locais):
             dias = (item["validade"] - date.today()).days
             cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
             
-            # LÓGICA ANTI-ZERO: Só exibe se for maior que 0
-            peso_exibido = f"{int(item['peso']) if item['peso'] == int(item['peso']) else item['peso']} {item['unidade']}" if item['peso'] > 0 else ""
+            # Formatação segura que evita o zero
+            p = item['peso']
+            peso_texto = f"{int(p) if p.is_integer() else p} {item['unidade']}" if p > 0 else ""
             
             st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                <b>{item["nome"]}</b> | <b>Marca:</b> {item["marca"]} | {peso_exibido} | 📅 {dias} dias</div>''', unsafe_allow_html=True)
+                <b>{item["nome"]}</b> | <b>Marca:</b> {item["marca"]} | {peso_texto} | 📅 {dias} dias</div>''', unsafe_allow_html=True)
             
             c1, c2 = st.columns([1, 1])
             if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
             if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
 
 with abas[-1]:
-    st.write("Produtos já cadastrados:")
     cursor.execute("SELECT nome FROM historico_produtos")
     for r in cursor.fetchall(): st.code(r[0])
