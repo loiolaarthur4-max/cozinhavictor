@@ -14,7 +14,7 @@ st.write("Sistema permanente ativo. Aguardando comandos do cozinheiro **Victor**
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# 1. Cria a tabela básica se ela não existir
+# 1. Cria a tabela básica de produtos se ela não existir
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS produtos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,12 +25,19 @@ CREATE TABLE IF NOT EXISTS produtos (
 """)
 conn.commit()
 
-# 2. Upgrade automático para adicionar a coluna 'marca' caso não exista
-try:
-    cursor.execute("ALTER TABLE produtos ADD COLUMN marca TEXT")
-    conn.commit()
-except sqlite3.OperationalError:
-    pass
+# 2. UPGRADES AUTOMÁTICOS DE COLUNAS (Evita quebrar o banco antigo)
+colunas_para_adicionar = [
+    ("marca", "TEXT"),
+    ("quantidade", "REAL DEFAULT 1.0"),
+    ("unidade", "TEXT DEFAULT 'Unidades'")
+]
+
+for coluna, tipo in colunas_para_adicionar:
+    try:
+        cursor.execute("ALTER TABLE produtos ADD COLUMN {0} {1}".format(coluna, tipo))
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
 # 3. Cria a tabela de histórico de sugestões
 cursor.execute("""
@@ -42,19 +49,21 @@ CREATE TABLE IF NOT EXISTS historico (
 """)
 conn.commit()
 
-# FUNÇÃO PARA CARREGAR PRODUTOS DO ESTOQUE (Agora puxando o ID também)
+# FUNÇÃO PARA CARREGAR PRODUTOS DO ESTOQUE
 def carregar_produtos():
-    cursor.execute("SELECT id, nome, marca, local, validade FROM produtos")
+    cursor.execute("SELECT id, nome, marca, local, validade, quantidade, unidade FROM produtos")
     linhas = cursor.fetchall()
     lista_produtos = []
     for linha in linhas:
         marca_produto = linha[2] if linha[2] else ""
         lista_produtos.append({
-            "id": linha[0], # Guardamos o ID numérico para saber quem deletar
+            "id": linha[0],
             "nome": linha[1],
             "marca": marca_produto,
             "local": linha[3],
-            "validade": datetime.strptime(linha[4], "%Y-%m-%d").date()
+            "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
+            "quantidade": linha[5] if linha[5] is not None else 1.0,
+            "unidade": linha[6] if linha[6] else "Unidades"
         })
     return lista_produtos
 
@@ -64,7 +73,7 @@ def carregar_historico_nomes():
 
 def carregar_historico_marcas():
     cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
-    return [linha[0] for linha in cursor.fetchall()]
+    return [linha[0] for inline_linha in cursor.fetchall()]
 
 if "produtos" not in st.session_state:
     st.session_state.produtos = carregar_produtos()
@@ -75,9 +84,9 @@ if "tempo_limpeza" not in st.session_state:
     st.session_state.tempo_limpeza = 0
 
 # Divisão em duas colunas
-col1, col2 = st.columns([1, 2])
+col1, col2 = st.columns([1, 1.8])
 
-# COLUNA 1: Formulário de Cadastro
+# COLUNA 1: Formulário de Cadastro Atualizado
 with col1:
     st.header("📥 Cadastrar Novo Produto")
     
@@ -99,12 +108,28 @@ with col1:
         "Freezer Grande"
     ])
     
+    # NOVAS ABAS DE QUANTIDADE E UNIDADE
+    col_qtd, col_uni = st.columns([1, 1])
+    with col_uni:
+        unidade_selecionada = st.selectbox("Medida:", ["Unidades", "Kg", "g"])
+    with col_qtd:
+        # Se for Kg ou g aceita números quebrados, se for Unidades vai de 1 em 1
+        if unidade_selecionada == "Kg":
+            qtd_selecionada = st.number_input("Quantidade:", min_value=0.01, value=1.0, step=0.1, format="%.2f")
+        elif unidade_selecionada == "g":
+            qtd_selecionada = st.number_input("Quantidade:", min_value=1.0, value=500.0, step=50.0, format="%.0f")
+        else:
+            qtd_selecionada = st.number_input("Quantidade:", min_value=1.0, value=1.0, step=1.0, format="%.0f")
+            
     data_val = st.date_input("Data de Validade do Produto:", min_value=date.today())
     
     if st.button("Adicionar ao Estoque"):
         if nome_final:
             data_texto = data_val.strftime("%Y-%m-%d")
-            cursor.execute("INSERT INTO produtos (nome, marca, local, validade) VALUES (?, ?, ?, ?)", (nome_final, marca_final, local, data_texto))
+            cursor.execute(
+                "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)", 
+                (nome_final, marca_final, local, data_texto, qtd_selecionada, unidade_selecionada)
+            )
             cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final, marca_final))
             conn.commit()
             
@@ -115,11 +140,11 @@ with col1:
         else:
             st.error("⚠️ Por favor, selecione ou digite o nome do produto.")
 
-# COLUNA 2: O painel de Alarmes com Exclusão Individual
+# COLUNA 2: O painel de Alarmes com Botões de + e -
 with col2:
     st.header("🚨 Alarmes e Estoque Atual")
     
-    # LÓGICA DO BOTÃO DESFAZER (Para quando apagar TUDO)
+    # LÓGICA DO BOTÃO DESFAZER TUDO
     if st.session_state.backup_produtos is not None:
         tempo_passado = time.time() - st.session_state.tempo_limpeza
         tempo_restante = int(10 - tempo_passado)
@@ -128,7 +153,10 @@ with col2:
             st.warning("⚠️ Todo o estoque foi apagado!")
             if st.button("🔄 DESFAZER AÇÃO ({0}s)".format(tempo_restante)):
                 for item in st.session_state.backup_produtos:
-                    cursor.execute("INSERT INTO produtos (nome, marca, local, validade) VALUES (?, ?, ?, ?)", (item["nome"], item["marca"], item["local"], item["validade"].strftime("%Y-%m-%d")))
+                    cursor.execute(
+                        "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)", 
+                        (item["nome"], item["marca"], item["local"], item["validade"].strftime("%Y-%m-%d"), item["quantidade"], item["unidade"])
+                    )
                 conn.commit()
                 st.session_state.produtos = carregar_produtos()
                 st.session_state.backup_produtos = None
@@ -144,7 +172,7 @@ with col2:
         st.info("O estoque está completamente vazio. Victor pode começar a enviar os produtos!")
     
     elif len(st.session_state.produtos) > 0:
-        if st.button("🗑️ Limpar Todo o Estoque"):
+        if st.button("🗑️ Limpar Todo O Estoque"):
             st.session_state.backup_produtos = st.session_state.produtos.copy()
             st.session_state.tempo_limpeza = time.time()
             cursor.execute("DELETE FROM produtos")
@@ -154,7 +182,6 @@ with col2:
             
         st.write("---")
         
-        # Lista os produtos criandos colunas menores para o botão de apagar
         for item in st.session_state.produtos:
             hoje = date.today()
             dias_restantes = (item["validade"] - hoje).days
@@ -178,27 +205,62 @@ with col2:
             
             texto_marca = " ({0})".format(item['marca']) if item['marca'] else ""
             
-            # Divide a linha do card em duas: 85% para o card e 15% para o botão de deletar
-            card_col, btn_col = st.columns([6, 1])
+            # Formatação bonita da quantidade (tira o .0 de números inteiros para não ficar feio)
+            if item['unidade'] == "Kg":
+                texto_qtd = "{:.2f} Kg".format(item['quantidade'])
+            elif item['unidade'] == "g":
+                texto_qtd = "{:.0f} g".format(item['quantidade'])
+            else:
+                texto_qtd = "{:.0f} Unid.".format(item['quantidade'])
+            
+            # Layout de exibição: Card à esquerda, controles de quantidade à direita
+            card_col, control_col = st.columns([3.5, 1.5])
             
             with card_col:
                 html_card = (
                     '<div style="padding: 12px; border-radius: 8px; border-left: 6px solid ' + cor_alarme + '; '
                     'background-color: ' + cor_fundo + '; margin-bottom: 12px; color: #1e293b; font-family: sans-serif;">'
                     '<span style="font-size: 12pt; font-weight: bold;">' + str(item['nome']) + texto_marca + '</span> <br>'
-                    '<span style="font-size: 10pt;">📍 Local: <b>' + str(item['local']) + '</b> | Validade: ' + item['validade'].strftime('%d/%m/%Y') + '</span><br>'
+                    '<span style="font-size: 10.5pt; color: #0f172a;">📦 Estoque: <b>' + texto_qtd + '</b></span><br>'
+                    '<span style="font-size: 9.5pt;">📍 Local: <b>' + str(item['local']) + '</b> | Validade: ' + item['validade'].strftime('%d/%m/%Y') + '</span><br>'
                     '<span style="font-size: 10.5pt; font-weight: bold; color: ' + cor_alarme + ';">' + status_texto + '</span>'
                     '</div>'
                 )
                 st.html(html_card)
                 
-            with btn_col:
-                # Cria um espaço vertical para alinhar o botão ao meio do card
-                st.write("")
-                # Botão de deletar individual usando o ID único do item no banco
-                if st.button("❌", key="del_{0}".format(item['id']), help="Remover apenas este produto"):
-                    cursor.execute("DELETE FROM produtos WHERE id = ?", (item['id'],))
-                    conn.commit()
-                    st.session_state.produtos = carregar_produtos()
-                    st.success("Removido!")
-                    st.rerun()
+            with control_col:
+                st.write("") # Alinhamento
+                c1, c2, c3 = st.columns([1, 1, 1])
+                
+                # Definição dos passos de clique (+ e -) dependendo da medida
+                passo = 0.1 if item['unidade'] == "Kg" else (50.0 if item['unidade'] == "g" else 1.0)
+                
+                with c1:
+                    # Botão de menos (-)
+                    if st.button("➖", key="sub_{0}".format(item['id'])):
+                        nova_qtd = item['quantidade'] - passo
+                        if nova_qtd <= 0:
+                            # Se chegar a zero ou menos, remove automaticamente o produto do banco
+                            cursor.execute("DELETE FROM produtos WHERE id = ?", (item['id'],))
+                        else:
+                            cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, item['id']))
+                        conn.commit()
+                        st.session_state.produtos = carregar_produtos()
+                        st.rerun()
+                        
+                with c2:
+                    # Botão de mais (+)
+                    if st.button("➕", key="add_{0}".format(item['id'])):
+                        nova_qtd = item['quantidade'] + passo
+                        cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, item['id']))
+                        conn.commit()
+                        st.session_state.produtos = carregar_produtos()
+                        st.rerun()
+                        
+                with c3:
+                    # Botão de excluir direto (Lixeira)
+                    if st.button("❌", key="del_{0}".format(item['id']), help="Remover item por completo"):
+                        cursor.execute("DELETE FROM produtos WHERE id = ?", (item['id'],))
+                        conn.commit()
+                        st.session_state.produtos = carregar_produtos()
+                        st.rerun()
