@@ -27,11 +27,11 @@ def renderizar_card(item):
     dias = (item["validade"] - date.today()).days
     cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
     
-    # Formatação limpa: mostra peso se > 0, senão mostra "---"
+    # FORÇA A EXIBIÇÃO: Remove o "---" e mostra o valor que estiver no banco
+    # Isso vai te mostrar exatamente o que está gravado.
     p = float(item['peso'])
-    peso_str = f"{int(p) if p.is_integer() else p} {item['unidade']}" if p > 0 else "---"
+    peso_str = f"{p:.1f} {item['unidade']}"
     
-    # IMPORTANTE: O parâmetro é unsafe_allow_html=True
     st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
         <b>{item["nome"]}</b> | <b>Marca:</b> {item["marca"]} | <b>Local:</b> {item["local"]} | <b>Peso:</b> {peso_str} | 📅 {dias} dias</div>''', unsafe_allow_html=True)
     
@@ -60,7 +60,8 @@ with st.sidebar:
     qtd_f = st.number_input("Quantidade", value=para_float(d.get("quantidade", 1.0)), step=1.0)
     unidades = ["Kg", "g", "L", "mL"]
     unid_f = st.selectbox("Unidade de Medida", unidades, index=unidades.index(d.get("unidade", "Kg")) if is_editing and d.get("unidade") in unidades else 0)
-    peso_f = st.number_input("Peso/Volume", value=para_float(d.get("peso", 0.0)), step=0.1)
+    # AQUI: Mudamos para exibir o valor real do banco
+    peso_f = st.number_input("Peso/Volume", value=para_float(d.get("peso", 0.0)), step=0.1, format="%.1f")
     data_f = st.date_input("Validade", value=d.get("validade", date.today()))
 
     if is_editing:
