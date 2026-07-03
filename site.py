@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime, date
 import sqlite3
+from streamlit_barcode_scanner import scan_barcode
 
 # Configuração da página
 st.set_page_config(page_title="Controle de Validade", page_icon="🍳", layout="wide")
@@ -39,16 +40,27 @@ def renderizar_card(item):
         conn.commit()
         st.rerun()
 
-# Estado de edição
+# Estado de edição e barcode
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
+if "scanned_barcode" not in st.session_state: st.session_state.scanned_barcode = None
 
-# Sidebar (Cadastro e Edição)
+# Sidebar
 with st.sidebar:
+    st.header("📷 Leitor de Código")
+    if st.button("Abrir Câmera para Escanear"):
+        scanned = scan_barcode()
+        if scanned:
+            st.session_state.scanned_barcode = scanned
+            st.success(f"Código: {scanned}")
+
     is_editing = st.session_state.edit_data is not None
     st.header("✏️ Editar" if is_editing else "📥 Cadastrar")
     d = st.session_state.edit_data if is_editing else {}
     
-    nome_f = st.text_input("Nome do Produto", value=d.get("nome", ""))
+    # Campo nome pré-preenchido se algo foi escaneado
+    nome_input = f"Produto {st.session_state.scanned_barcode}" if st.session_state.scanned_barcode else d.get("nome", "")
+    
+    nome_f = st.text_input("Nome do Produto", value=nome_input)
     marca_f = st.text_input("Marca", value=d.get("marca", ""))
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local", locais, index=locais.index(d.get("local", locais[0])) if is_editing and d.get("local") in locais else 0)
@@ -56,19 +68,16 @@ with st.sidebar:
     data_f = st.date_input("Validade", value=d.get("validade", date.today()))
 
     if is_editing:
-        col_edit1, col_edit2 = st.columns(2)
-        if col_edit1.button("💾 Atualizar"):
+        col1, col2 = st.columns(2)
+        if col1.button("💾 Atualizar"):
             cursor.execute("UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=? WHERE id=?", (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, d["id"]))
-            conn.commit(); st.session_state.edit_data = None; st.rerun()
-        if col_edit2.button("❌ Cancelar"):
-            st.session_state.edit_data = None
-            st.rerun()
+            conn.commit(); st.session_state.edit_data = None; st.session_state.scanned_barcode = None; st.rerun()
+        if col2.button("❌ Cancelar"):
+            st.session_state.edit_data = None; st.session_state.scanned_barcode = None; st.rerun()
     else:
         if st.button("🚀 Salvar"):
             cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso) VALUES (?,?,?,?,?,0)", (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f))
-            cursor.execute("INSERT OR IGNORE INTO historico_produtos (nome) VALUES (?)", (nome_f,))
-            cursor.execute("INSERT OR IGNORE INTO historico_marcas (nome) VALUES (?)", (marca_f,))
-            conn.commit(); st.rerun()
+            conn.commit(); st.session_state.scanned_barcode = None; st.rerun()
 
 # Estoque
 st.header("🚨 Estoque")
@@ -76,7 +85,6 @@ busca = st.text_input("🔍 Pesquisar produtos...", placeholder="Digite o nome..
 produtos = carregar_produtos()
 
 if busca:
-    st.write(f"Resultados para: **{busca}**")
     for item in [p for p in produtos if busca.lower() in p['nome'].lower()]:
         renderizar_card(item)
 else:
@@ -87,12 +95,6 @@ else:
                 renderizar_card(item)
     
     with abas[-1]:
-        c1, c2 = st.columns(2)
-        with c1:
-            st.write("### Produtos")
-            cursor.execute("SELECT nome FROM historico_produtos")
-            for r in cursor.fetchall(): st.code(r[0])
-        with c2:
-            st.write("### Marcas")
-            cursor.execute("SELECT nome FROM historico_marcas")
-            for r in cursor.fetchall(): st.code(r[0])
+        st.write("### Produtos Recentes")
+        cursor.execute("SELECT nome FROM historico_produtos")
+        for r in cursor.fetchall(): st.code(r[0])
