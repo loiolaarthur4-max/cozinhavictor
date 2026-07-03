@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS produtos (
 """)
 conn.commit()
 
-# 2. UPGRADES AUTOMÁTICOS DE COLUNAS (Evita quebrar o banco antigo)
+# 2. UPGRADES AUTOMÁTICOS DE COLUNAS
 colunas_para_adicionar = [
     ("marca", "TEXT"),
     ("quantidade", "REAL DEFAULT 1.0"),
@@ -55,10 +55,10 @@ def carregar_produtos():
     linhas = cursor.fetchall()
     lista_produtos = []
     for linha in linhas:
-        marca_produto = linha[2] if linha[2] else ""
+        marca_produto = Henry_marca_produto := linha[2] if linha[2] else ""
         lista_produtos.append({
             "id": linha[0],
-            "nome": linha[1],
+            "nome": Henry_nome_produto := linha[1],
             "marca": marca_produto,
             "local": linha[3],
             "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
@@ -73,7 +73,8 @@ def carregar_historico_nomes():
 
 def carregar_historico_marcas():
     cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
-    return [linha[0] for inline_linha in cursor.fetchall()]
+    # LINHA CORRIGIDA AQUI: Mudado de inline_linha para linha
+    return [linha[0] for linha in cursor.fetchall()]
 
 if "produtos" not in st.session_state:
     st.session_state.produtos = carregar_produtos()
@@ -86,7 +87,7 @@ if "tempo_limpeza" not in st.session_state:
 # Divisão em duas colunas
 col1, col2 = st.columns([1, 1.8])
 
-# COLUNA 1: Formulário de Cadastro Atualizado
+# COLUNA 1: Formulário de Cadastro
 with col1:
     st.header("📥 Cadastrar Novo Produto")
     
@@ -108,12 +109,10 @@ with col1:
         "Freezer Grande"
     ])
     
-    # NOVAS ABAS DE QUANTIDADE E UNIDADE
     col_qtd, col_uni = st.columns([1, 1])
     with col_uni:
         unidade_selecionada = st.selectbox("Medida:", ["Unidades", "Kg", "g"])
     with col_qtd:
-        # Se for Kg ou g aceita números quebrados, se for Unidades vai de 1 em 1
         if unidade_selecionada == "Kg":
             qtd_selecionada = st.number_input("Quantidade:", min_value=0.01, value=1.0, step=0.1, format="%.2f")
         elif unidade_selecionada == "g":
@@ -140,11 +139,10 @@ with col1:
         else:
             st.error("⚠️ Por favor, selecione ou digite o nome do produto.")
 
-# COLUNA 2: O painel de Alarmes com Botões de + e -
+# COLUNA 2: Painel de Estoque e Controles
 with col2:
     st.header("🚨 Alarmes e Estoque Atual")
     
-    # LÓGICA DO BOTÃO DESFAZER TUDO
     if st.session_state.backup_produtos is not None:
         tempo_passado = time.time() - st.session_state.tempo_limpeza
         tempo_restante = int(10 - tempo_passado)
@@ -205,7 +203,6 @@ with col2:
             
             texto_marca = " ({0})".format(item['marca']) if item['marca'] else ""
             
-            # Formatação bonita da quantidade (tira o .0 de números inteiros para não ficar feio)
             if item['unidade'] == "Kg":
                 texto_qtd = "{:.2f} Kg".format(item['quantidade'])
             elif item['unidade'] == "g":
@@ -213,7 +210,6 @@ with col2:
             else:
                 texto_qtd = "{:.0f} Unid.".format(item['quantidade'])
             
-            # Layout de exibição: Card à esquerda, controles de quantidade à direita
             card_col, control_col = st.columns([3.5, 1.5])
             
             with card_col:
@@ -229,18 +225,15 @@ with col2:
                 st.html(html_card)
                 
             with control_col:
-                st.write("") # Alinhamento
+                st.write("") 
                 c1, c2, c3 = st.columns([1, 1, 1])
                 
-                # Definição dos passos de clique (+ e -) dependendo da medida
                 passo = 0.1 if item['unidade'] == "Kg" else (50.0 if item['unidade'] == "g" else 1.0)
                 
                 with c1:
-                    # Botão de menos (-)
                     if st.button("➖", key="sub_{0}".format(item['id'])):
                         nova_qtd = item['quantidade'] - passo
                         if nova_qtd <= 0:
-                            # Se chegar a zero ou menos, remove automaticamente o produto do banco
                             cursor.execute("DELETE FROM produtos WHERE id = ?", (item['id'],))
                         else:
                             cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, item['id']))
@@ -249,7 +242,6 @@ with col2:
                         st.rerun()
                         
                 with c2:
-                    # Botão de mais (+)
                     if st.button("➕", key="add_{0}".format(item['id'])):
                         nova_qtd = item['quantidade'] + passo
                         cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, item['id']))
@@ -258,7 +250,6 @@ with col2:
                         st.rerun()
                         
                 with c3:
-                    # Botão de excluir direto (Lixeira)
                     if st.button("❌", key="del_{0}".format(item['id']), help="Remover item por completo"):
                         cursor.execute("DELETE FROM produtos WHERE id = ?", (item['id'],))
                         conn.commit()
