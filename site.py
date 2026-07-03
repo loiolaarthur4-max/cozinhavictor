@@ -1,97 +1,31 @@
-import streamlit as st
-from datetime import datetime, date
-import sqlite3
-
-st.set_page_config(page_title="Controle de Validade", page_icon="🍳", layout="wide")
-st.title("🍳 Sistema de Controle da Cozinha")
-st.write("Sistema permanente ativo. Aguardando comandos do cozinheiro **Victor**.")
-
-conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
-cursor = conn.cursor()
-
-# Tabelas
-cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
-cursor.execute("CREATE TABLE IF NOT EXISTS historico (id INTEGER PRIMARY KEY AUTOINCREMENT, item_nome TEXT UNIQUE, item_marca TEXT UNIQUE)")
-conn.commit()
-
-# Funções
-def get_historico(tipo):
-    cursor.execute(f"SELECT item_{tipo} FROM historico WHERE item_{tipo} IS NOT NULL AND item_{tipo} != ''")
-    return [l[0] for l in cursor.fetchall()]
-
-def carregar_produtos():
-    cursor.execute("SELECT * FROM produtos")
-    return [{"id": l[0], "nome": l[1], "local": l[2], "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4], "quantidade": l[5], "peso": l[6], "unidade": l[7]} for l in cursor.fetchall()]
-
-# Estado de Edição
-if "edit_data" not in st.session_state: st.session_state.edit_data = None
-
-col1, col2 = st.columns([1.2, 1.8])
-
 with col1:
-    # Lógica do Título e Botões baseada no estado de edição
     is_editing = st.session_state.edit_data is not None
     st.header("✏️ Editar Produto" if is_editing else "📥 Cadastrar Produto")
     
-    # Valores iniciais
     d = st.session_state.edit_data if is_editing else {}
-    
+
+    # Histórico de Nomes
     st.subheader("Nome do Produto")
-    nome_f = st.text_input("Nome", value=d.get("nome", ""))
+    opcoes_nome = [""] + get_historico("nome")
+    sel_nome = st.selectbox("Selecionar do Histórico (Nome)", opcoes_nome)
+    nome_f = st.text_input("Ou digitar NOVO nome:", value=d.get("nome", "") if is_editing else "")
+    nome_final = nome_f if nome_f else sel_nome
     
+    # Histórico de Marcas
     st.subheader("Marca")
-    marca_f = st.text_input("Marca", value=d.get("marca", ""))
+    opcoes_marca = [""] + get_historico("marca")
+    sel_marca = st.selectbox("Selecionar do Histórico (Marca)", opcoes_marca)
+    marca_f = st.text_input("Ou digitar NOVA marca:", value=d.get("marca", "") if is_editing else "")
+    marca_final = marca_f if marca_f else sel_marca
     
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
-    local_f = st.selectbox("Local", locais, index=locais.index(d["local"]) if is_editing else 0)
+    local_f = st.selectbox("Local", locais, index=locais.index(d["local"]) if is_editing and d["local"] in locais else 0)
     qtd_f = st.number_input("Quantidade", value=float(d.get("quantidade", 1.0)))
-    unid_f = st.selectbox("Unidade", ["Kg", "g", "L", "mL"], index=["Kg", "g", "L", "mL"].index(d.get("unidade", "Kg")) if is_editing else 0)
+    
+    opcoes_unidade = ["Kg", "g", "L", "mL"]
+    unidade_atual = d.get("unidade", "Kg")
+    idx_unid = opcoes_unidade.index(unidade_atual) if is_editing and unidade_atual in opcoes_unidade else 0
+    unid_f = st.selectbox("Unidade", opcoes_unidade, index=idx_unid)
+    
     peso_f = st.number_input("Peso/Volume", value=float(d.get("peso", 0.0)))
     data_f = st.date_input("Validade", value=d["validade"] if is_editing else date.today())
-
-    if is_editing:
-        c_sub, c_can = st.columns(2)
-        if c_sub.button("💾 Atualizar Produto"):
-            cursor.execute("UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=?, peso=?, unidade=? WHERE id=?", 
-                           (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f, d["id"]))
-            conn.commit()
-            st.session_state.edit_data = None
-            st.rerun()
-        if c_can.button("❌ Cancelar"):
-            st.session_state.edit_data = None
-            st.rerun()
-    else:
-        if st.button("🚀 Adicionar ao Estoque"):
-            cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?,?,?,?,?,?,?)", 
-                           (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f))
-            if nome_f: cursor.execute("INSERT OR IGNORE INTO historico (item_nome) VALUES (?)", (nome_f,))
-            if marca_f: cursor.execute("INSERT OR IGNORE INTO historico (item_marca) VALUES (?)", (marca_f,))
-            conn.commit()
-            st.rerun()
-
-with col2:
-    st.header("🚨 Estoque por Local")
-    produtos = carregar_produtos()
-    abas = st.tabs(["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"])
-    
-    for i, local in enumerate(["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]):
-        with abas[i]:
-            for item in [p for p in produtos if p['local'] == local]:
-                dias = (item["validade"] - date.today()).days
-                bg = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
-                
-                st.markdown(f"""
-                <div style="padding: 12px; background-color: {bg}; color: #ffffff; margin-bottom: 10px; border-radius: 8px;">
-                    <b style="font-size: 1.2em;">{item['nome']}</b> {f'({item['marca']})' if item['marca'] else ''}<br>
-                    📦 {item['quantidade']:.0f} un x {item['peso']}{item['unidade']} | 📅 Validade: {item['validade'].strftime('%d/%m/%Y')} <b>({dias} dias)</b>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                c1, c2 = st.columns(2)
-                if c1.button("✏️ Editar", key=f"e{item['id']}"):
-                    st.session_state.edit_data = item
-                    st.rerun()
-                if c2.button("❌ Excluir", key=f"d{item['id']}"):
-                    cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],))
-                    conn.commit()
-                    st.rerun()
