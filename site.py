@@ -13,13 +13,12 @@ cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
 def para_float(valor):
-    try:
-        return float(valor) if valor is not None else 0.0
+    try: return float(valor) if valor is not None else 0.0
     except: return 0.0
 
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
-    return [{"id": l[0], "nome": l[1] or "", "local": l[2] or "", "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4] or "", "quantidade": para_float(l[5]), "peso": para_float(l[6]), "unidade": l[7] or ""} for l in cursor.fetchall()]
+    return [{"id": l[0], "nome": l[1] or "", "local": l[2] or "", "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4] or "", "quantidade": para_float(l[5]), "peso": para_float(l[6]), "unidade": (l[7] or "").strip()} for l in cursor.fetchall()]
 
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
@@ -37,7 +36,7 @@ with col1:
     qtd_f = st.number_input("Quantidade", value=para_float(d.get("quantidade", 1.0)), step=0.1)
     unidades = ["Kg", "g", "L", "mL"]
     unid_f = st.selectbox("Unidade", unidades, index=unidades.index(d.get("unidade", "Kg")) if is_editing and d.get("unidade") in unidades else 0)
-    peso_f = st.number_input("Peso (g/ml/kg)", value=para_float(d.get("peso", 0.0)), step=0.1)
+    peso_f = st.number_input("Peso", value=para_float(d.get("peso", 0.0)), step=0.1)
     data_f = st.date_input("Validade", value=d.get("validade", date.today()))
 
     if is_editing:
@@ -55,40 +54,38 @@ with col1:
 
 with col2:
     st.header("🚨 Estoque")
-    busca = st.text_input("🔍 Pesquisar...", placeholder="Digite para filtrar...")
     produtos = carregar_produtos()
-
-    if busca:
-        if st.button("⬅️ Sair da Pesquisa"): st.rerun()
-        lista_exibicao = [p for p in produtos if busca.lower() in p['nome'].lower()]
-    else:
-        abas = st.tabs(locais + ["📜 Histórico"])
-        lista_exibicao = []
-        for i, local in enumerate(locais):
-            with abas[i]:
-                for item in [p for p in produtos if p['local'] == local]:
-                    dias = (item["validade"] - date.today()).days
-                    cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
-                    # FORÇA A EXIBIÇÃO LIMPA DO PESO
-                    st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                        <b>{item["nome"]}</b> | 📅 {dias} dias p/ vencer | {int(item["peso"]) if item["peso"].is_integer() else item["peso"]} {item["unidade"]}</div>''', unsafe_allow_html=True)
-                    c1, c2 = st.columns([1, 1])
-                    if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
-                    if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
+    abas = st.tabs(locais + ["📜 Histórico"])
+    
+    for i, local in enumerate(locais):
+        with abas[i]:
+            for item in [p for p in produtos if p['local'] == local]:
+                dias = (item["validade"] - date.today()).days
+                cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
+                
+                # Exibição puramente formatada
+                peso_display = f"{int(item['peso']) if item['peso'].is_integer() else item['peso']}"
+                
+                st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
+                    <b>{item["nome"]}</b> | 📅 {dias} dias | {peso_display} {item["unidade"]}</div>''', unsafe_allow_html=True)
+                
+                c1, c2 = st.columns([1, 1])
+                if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
+                if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
         
-        with abas[-1]:
-            h1, h2 = st.columns(2)
-            with h1:
-                st.write("**Produtos:**")
-                cursor.execute("SELECT nome FROM historico_produtos")
-                for r in cursor.fetchall():
-                    c_c, c_d = st.columns([3, 1])
-                    c_c.code(r[0])
-                    if c_d.button("❌", key=f"del_p_{r[0]}"): cursor.execute("DELETE FROM historico_produtos WHERE nome=?", (r[0],)); conn.commit(); st.rerun()
-            with h2:
-                st.write("**Marcas:**")
-                cursor.execute("SELECT nome FROM historico_marcas")
-                for r in cursor.fetchall():
-                    c_c, c_d = st.columns([3, 1])
-                    c_c.code(r[0])
-                    if c_d.button("❌", key=f"del_m_{r[0]}"): cursor.execute("DELETE FROM historico_marcas WHERE nome=?", (r[0],)); conn.commit(); st.rerun()
+    with abas[-1]:
+        h1, h2 = st.columns(2)
+        with h1:
+            st.write("**Produtos:**")
+            cursor.execute("SELECT nome FROM historico_produtos")
+            for r in cursor.fetchall():
+                c_c, c_d = st.columns([3, 1])
+                c_c.code(r[0]); 
+                if c_d.button("❌", key=f"del_p_{r[0]}"): cursor.execute("DELETE FROM historico_produtos WHERE nome=?", (r[0],)); conn.commit(); st.rerun()
+        with h2:
+            st.write("**Marcas:**")
+            cursor.execute("SELECT nome FROM historico_marcas")
+            for r in cursor.fetchall():
+                c_c, c_d = st.columns([3, 1])
+                c_c.code(r[0]); 
+                if c_d.button("❌", key=f"del_m_{r[0]}"): cursor.execute("DELETE FROM historico_marcas WHERE nome=?", (r[0],)); conn.commit(); st.rerun()
