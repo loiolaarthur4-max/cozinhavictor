@@ -54,7 +54,7 @@ def carregar_produtos():
     cursor.execute("SELECT id, nome, marca, local, validade, quantidade, unidade FROM produtos")
     linhas = cursor.fetchall()
     lista_produtos = []
-    for linha in linhas:
+    for linha in pipelines := linhas:
         marca_produto = linha[2] if linha[2] else ""
         qtd_produto = linha[5] if (len(linha) > 5 and linha[5] is not None) else 1.0
         unidade_produto = linha[6] if (len(linha) > 6 and linha[6]) else "Unidades"
@@ -63,7 +63,7 @@ def carregar_produtos():
             "id": linha[0],
             "nome": linha[1],
             "marca": marca_produto,
-            "local": linha[3], # LINHA CORRIGIDA (Removido por completo o Henry_loc_item :=)
+            "local": linha[3],
             "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
             "quantidade": qtd_produto,
             "unidade": unidade_produto
@@ -89,85 +89,60 @@ if "tempo_limpeza" not in st.session_state:
 # Divisão em duas colunas principais
 col1, col2 = st.columns([1.1, 1.7])
 
-# COLUNA 1: Cadastro dividido em Abas Separadas
+# COLUNA 1: Painel de Cadastro Unificado
 with col1:
     st.header("📥 Cadastrar Novo Produto")
     
     lista_sugestoes_nome = carregar_historico_nomes()
     lista_sugestoes_marca = carregar_historico_marcas()
     
-    # CRIAÇÃO DAS ABAS
-    aba_unidades, aba_peso = st.tabs(["📦 Cadastro por Unidade", "⚖️ Cadastro por Peso (Kg/g)"])
+    # Informações básicas do produto
+    nome_item = st.selectbox("Nome do Alimento (Histórico):", options=[""] + lista_sugestoes_nome, index=0, key="sel_prod")
+    nome_novo = st.text_input("Ou digite um NOVO nome:", key="txt_prod")
+    nome_final = nome_novo.strip() if nome_novo else nome_item
     
-    # --- ABA 1: APENAS UNIDADES ---
-    with aba_unidades:
-        st.subheader("Itens Contáveis (Caixas, Latas, Garrafas)")
-        
-        nome_uni = st.selectbox("Nome do Alimento (Histórico):", options=[""] + lista_sugestoes_nome, index=0, key="sel_uni")
-        nome_novo_uni = st.text_input("Ou digite um NOVO nome:", key="txt_uni")
-        nome_final_uni = nome_novo_uni.strip() if nome_novo_uni else nome_uni
-        
-        marca_uni = st.selectbox("Marca (Histórico):", options=[""] + lista_sugestoes_marca, index=0, key="mar_uni")
-        marca_nova_uni = st.text_input("Ou digite uma NOVA marca:", key="txt_mar_uni")
-        marca_final_uni = marca_nova_uni.strip() if marca_nova_uni else marca_uni
+    marca_item = st.selectbox("Marca (Histórico):", options=[""] + lista_sugestoes_marca, index=0, key="mar_prod")
+    marca_nova = st.text_input("Ou digite uma NOVA marca:", key="txt_mar_prod")
+    marca_final = marca_nova.strip() if marca_nova else marca_item
 
-        local_uni = st.selectbox("Onde guardar?", ["Geladeira Principal (1)", "Freezer Branco", "Freezer Red Bull", "Freezer Grande"], key="loc_uni")
+    local_armazenamento = st.selectbox("Onde guardar?", ["Geladeira Principal (1)", "Freezer Branco", "Freezer Red Bull", "Freezer Grande"], key="loc_prod")
+    
+    st.write("---")
+    st.subheader("Medida do Produto")
+    
+    # Campo 1: Caixa de seleção da unidade de medida
+    unidade_selecionada = st.radio(
+        "Selecione o tipo de medida:", 
+        ["Unidades", "Kg", "g"], 
+        horizontal=True, 
+        key="tipo_unidade_medida"
+    )
+    
+    # Campo 2: Caixa numérica dinâmica que se adapta à escolha do Victor
+    if unidade_selecionada == "Kg":
+        qtd_final = st.number_input("Digite o peso em Quilos (Ex: 1.50):", min_value=0.01, value=1.0, step=0.1, format="%.2f", key="input_kg")
+    elif unidade_selecionada == "g":
+        qtd_final = st.number_input("Digite o peso em Gramas (Ex: 500):", min_value=1.0, value=500.0, step=50.0, format="%.0f", key="input_g")
+    else:
+        qtd_final = st.number_input("Digite a quantidade de Unidades:", min_value=1.0, value=1.0, step=1.0, format="%.0f", key="input_uni")
         
-        qtd_uni = st.number_input("Quantidade (Inteira):", min_value=1.0, value=1.0, step=1.0, format="%.0f", key="qtd_uni")
-        data_val_uni = st.date_input("Data de Validade:", min_value=date.today(), key="dat_uni")
-        
-        if st.button("Adicionar Unidade(s) ao Estoque", key="btn_cad_uni"):
-            if nome_final_uni:
-                data_texto = data_val_uni.strftime("%Y-%m-%d")
-                cursor.execute(
-                    "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)",
-                    (nome_final_uni, marca_final_uni, local_uni, data_texto, qtd_uni, "Unidades")
-                )
-                cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final_uni, marca_final_uni))
-                conn.commit()
-                st.session_state.produtos = carregar_produtos()
-                st.success(f"🟢 {nome_final_uni} adicionado!")
-                st.rerun()
-            else:
-                st.error("⚠️ Digite ou selecione o nome do produto.")
-
-    # --- ABA 2: APENAS PESO (KG OU G) ---
-    with aba_peso:
-        st.subheader("Itens Pesados (Carnes, Frios, Grãos, Massas)")
-        
-        nome_peso = st.selectbox("Nome do Alimento (Histórico):", options=[""] + lista_sugestoes_nome, index=0, key="sel_peso")
-        nome_novo_peso = st.text_input("Ou digite um NOVO nome:", key="txt_peso")
-        nome_final_peso = nome_novo_peso.strip() if nome_novo_peso else nome_peso
-        
-        marca_peso = st.selectbox("Marca (Histórico):", options=[""] + lista_sugestoes_marca, index=0, key="mar_peso")
-        marca_nova_peso = st.text_input("Ou digite uma NOVA marca:", key="txt_mar_peso")
-        marca_final_peso = marca_nova_peso.strip() if marca_nova_peso else marca_peso
-
-        local_peso = st.selectbox("Onde guardar?", ["Geladeira Principal (1)", "Freezer Branco", "Freezer Red Bull", "Freezer Grande"], key="loc_peso")
-        
-        unidade_peso_escolhida = st.radio("Escolha a unidade de medida:", ["Kg", "g"], horizontal=True, key="escolha_unidade_peso")
-        
-        if unidade_peso_escolhida == "Kg":
-            qtd_peso = st.number_input("Peso em Quilos (Ex: 1.50):", min_value=0.01, value=1.0, step=0.1, format="%.2f", key="num_kg")
+    data_validade = st.date_input("Data de Validade:", min_value=date.today(), key="data_prod")
+    
+    # Botão Único para Adicionar
+    if st.button("🚀 Adicionar ao Estoque", use_container_width=True, key="btn_salvar_tudo"):
+        if nome_final:
+            data_texto = data_validade.strftime("%Y-%m-%d")
+            cursor.execute(
+                "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)", 
+                (nome_final, marca_final, local_armazenamento, data_texto, qtd_final, unidade_selecionada)
+            )
+            cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final, marca_final))
+            conn.commit()
+            st.session_state.produtos = carregar_produtos()
+            st.success(f"🟢 {nome_final} ({qtd_final} {unidade_selecionada}) adicionado com sucesso!")
+            st.rerun()
         else:
-            qtd_peso = st.number_input("Peso em Gramas (Ex: 500):", min_value=1.0, value=500.0, step=50.0, format="%.0f", key="num_g")
-            
-        data_val_peso = st.date_input("Data de Validade:", min_value=date.today(), key="dat_peso")
-        
-        if st.button("Adicionar Peso ao Estoque", key="btn_cad_peso"):
-            if nome_final_peso:
-                data_texto = data_val_peso.strftime("%Y-%m-%d")
-                cursor.execute(
-                    "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)", 
-                    (nome_final_peso, marca_final_peso, local_peso, data_texto, qtd_peso, unidade_peso_escolhida)
-                )
-                cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final_peso, marca_final_peso))
-                conn.commit()
-                st.session_state.produtos = carregar_produtos()
-                st.success(f"🟢 {nome_final_peso} adicionado com peso correto!")
-                st.rerun()
-            else:
-                st.error("⚠️ Digite ou selecione o nome do produto.")
+            st.error("⚠️ Digite ou selecione o nome do produto.")
 
 # COLUNA 2: Painel de Estoque e Controles
 with col2:
