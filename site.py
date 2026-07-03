@@ -62,16 +62,18 @@ with col2:
         resultados = [p for p in produtos if busca.lower() in p['nome'].lower()]
         for item in resultados:
             cor = "#ef4444" if (item["validade"] - date.today()).days <= 3 else "#16a34a"
+            # CORREÇÃO AQUI: unsafe_allow_html=True
             st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} ({item["local"]})</div>''', unsafe_html=True)
+                <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} ({item["local"]})</div>''', unsafe_allow_html=True)
     else:
         abas = st.tabs(locais + ["📜 Histórico"])
         for i, local in enumerate(locais):
             with abas[i]:
                 for item in [p for p in produtos if p['local'] == local]:
                     cor = "#ef4444" if (item["validade"] - date.today()).days <= 3 else "#16a34a"
+                    # CORREÇÃO AQUI: unsafe_allow_html=True
                     st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                        <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]}</div>''', unsafe_html=True)
+                        <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]}</div>''', unsafe_allow_html=True)
                     c1, c2 = st.columns([1, 1])
                     if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
                     if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
