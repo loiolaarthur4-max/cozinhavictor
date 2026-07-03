@@ -18,7 +18,24 @@ def para_float(valor):
 
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
-    return [{"id": l[0], "nome": l[1] or "", "local": l[2] or "", "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4] or "", "quantidade": para_float(l[5]), "peso": para_float(l[6]), "unidade": (l[7] or "").strip()} for l in cursor.fetchall()]
+    rows = cursor.fetchall()
+    lista = []
+    for l in rows:
+        try:
+            validade_dt = datetime.strptime(str(l[3]), "%Y-%m-%d").date()
+        except:
+            validade_dt = date.today()
+        lista.append({
+            "id": l[0],
+            "nome": l[1] or "",
+            "local": l[2] or "",
+            "validade": validade_dt,
+            "marca": l[4] or "",
+            "quantidade": para_float(l[5]),
+            "peso": para_float(l[6]),
+            "unidade": str(l[7] or "").strip()
+        })
+    return lista
 
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
@@ -63,11 +80,11 @@ with col2:
                 dias = (item["validade"] - date.today()).days
                 cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
                 
-                # Exibição puramente formatada
-                peso_display = f"{int(item['peso']) if item['peso'].is_integer() else item['peso']}"
+                # Exibição: trata o peso para não mostrar decimais se for inteiro
+                peso_display = int(item['peso']) if item['peso'].is_integer() else item['peso']
                 
                 st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                    <b>{item["nome"]}</b> | 📅 {dias} dias | {peso_display} {item["unidade"]}</div>''', unsafe_allow_html=True)
+                    <b>{item["nome"]}</b> | 📅 {dias} dias | {peso_display} {item["unidade"]}</div>''', unsafe_html=True)
                 
                 c1, c2 = st.columns([1, 1])
                 if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
