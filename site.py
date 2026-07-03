@@ -80,11 +80,13 @@ with col2:
                 dias = (item["validade"] - date.today()).days
                 cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
                 
-                # Exibição: trata o peso para não mostrar decimais se for inteiro
-                peso_display = int(item['peso']) if item['peso'].is_integer() else item['peso']
+                # Formata peso para string sem decimais se for inteiro
+                peso_val = item['peso']
+                peso_display = int(peso_val) if peso_val.is_integer() else peso_val
                 
+                # AQUI ESTÁ A CORREÇÃO: unsafe_allow_html=True
                 st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                    <b>{item["nome"]}</b> | 📅 {dias} dias | {peso_display} {item["unidade"]}</div>''', unsafe_html=True)
+                    <b>{item["nome"]}</b> | 📅 {dias} dias | {peso_display} {item["unidade"]}</div>''', unsafe_allow_html=True)
                 
                 c1, c2 = st.columns([1, 1])
                 if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
