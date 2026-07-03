@@ -2,11 +2,9 @@ import streamlit as st
 from datetime import datetime, date
 import sqlite3
 
-# Configuração da página
 st.set_page_config(page_title="Controle de Validade", page_icon="🍳", layout="wide")
 st.title("🍳 Sistema de Controle da Cozinha")
 
-# Conexão com Banco de Dados
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
@@ -17,6 +15,10 @@ conn.commit()
 def para_float(valor):
     try: return float(valor) if valor is not None else 0.0
     except: return 0.0
+
+def carregar_historico(tabela):
+    cursor.execute(f"SELECT nome FROM {tabela}")
+    return [r[0] for r in cursor.fetchall()]
 
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
@@ -30,9 +32,14 @@ with col1:
     is_editing = st.session_state.edit_data is not None
     st.header("✏️ Editar" if is_editing else "📥 Cadastrar")
     d = st.session_state.edit_data if is_editing else {}
+
+    # Campos com histórico (combobox)
+    produtos_hist = carregar_historico("historico_produtos")
+    marcas_hist = carregar_historico("historico_marcas")
     
-    nome_final = st.text_input("Nome do Produto", value=d.get("nome", ""))
-    marca_final = st.text_input("Marca", value=d.get("marca", ""))
+    nome_final = st.selectbox("Nome do Produto", options=sorted(produtos_hist), index=None if not is_editing else (sorted(produtos_hist).index(d["nome"]) if d["nome"] in produtos_hist else None), editable=True)
+    marca_final = st.selectbox("Marca", options=sorted(marcas_hist), index=None if not is_editing else (sorted(marcas_hist).index(d["marca"]) if d["marca"] in marcas_hist else None), editable=True)
+    
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local", locais, index=locais.index(d["local"]) if is_editing and d.get("local") in locais else 0)
     qtd_f = st.number_input("Quantidade", value=para_float(d.get("quantidade", 1.0)))
@@ -86,18 +93,3 @@ with col2:
                     c1, c2 = st.columns([1, 1])
                     if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
                     if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
-        
-        # Históricos fixos abaixo das abas de geladeira
-        st.divider()
-        st.subheader("📜 Histórico Geral")
-        h1, h2 = st.columns(2)
-        with h1:
-            st.caption("Produtos Cadastrados")
-            cursor.execute("SELECT nome FROM historico_produtos")
-            produtos_hist = [r[0] for r in cursor.fetchall()]
-            st.write(", ".join(produtos_hist))
-        with h2:
-            st.caption("Marcas Cadastradas")
-            cursor.execute("SELECT nome FROM historico_marcas")
-            marcas_hist = [r[0] for r in cursor.fetchall()]
-            st.write(", ".join(marcas_hist))
