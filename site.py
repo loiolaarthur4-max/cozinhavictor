@@ -1,8 +1,3 @@
-Peço desculpas, Arthur! O erro aconteceu porque copiei a explicação junto com o código, e o Python não entendeu aquela frase como parte do programa.
-
-Aqui está **apenas o código limpo**, pronto para copiar e colar no seu arquivo. Ele corrige o problema de visualização, trata os campos para evitar erros de tipo e inclui o botão de sair da pesquisa:
-
-```python
 import streamlit as st
 from datetime import datetime, date
 import sqlite3
@@ -87,5 +82,3 @@ with col2:
                     c1, c2 = st.columns([1, 1])
                     if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
                     if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
-
-```
