@@ -9,11 +9,7 @@ st.title("🍳 Sistema de Controle da Cozinha")
 # Conexão com Banco de Dados
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
-
-# Tabelas: produtos e histórico separado (usando DISTINCT para não repetir)
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
-cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)")
-cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
 def para_float(valor):
@@ -58,39 +54,38 @@ with col1:
         if st.button("🚀 Salvar"):
             cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?,?,?,?,?,?,?)", 
                            (nome_final, marca_final, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f))
-            # Atualiza históricos
-            cursor.execute("INSERT OR IGNORE INTO historico_produtos (nome) VALUES (?)", (nome_final,))
-            cursor.execute("INSERT OR IGNORE INTO historico_marcas (nome) VALUES (?)", (marca_final,))
             conn.commit()
             st.rerun()
 
 with col2:
-    st.header("🚨 Estoque Atual")
-    busca = st.text_input("🔍 Pesquisar produto...", placeholder="Comece a digitar...")
-    produtos = carregar_produtos()
-    abas = st.tabs(locais + ["📜 Histórico"])
+    st.header("🔍 Pesquisa e Estoque")
+    busca = st.text_input("🔍 Digite para pesquisar...", placeholder="Ex: Pepperoni...")
     
-    for i, local in enumerate(locais):
-        with abas[i]:
-            itens = [p for p in produtos if p['local'] == local and (busca.lower() in p['nome'].lower())]
-            if not itens: st.info("Geladeira vazia ou item não encontrado.")
-            for item in itens:
-                dias = (item["validade"] - date.today()).days
-                cor = "#000000" if dias < 0 else ("#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a"))
-                st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: #ffffff; border-radius: 8px; margin-bottom: 8px;">
-                    <b>{item["nome"]}</b> ({item["marca"]}) | 📅 {item["validade"].strftime("%d/%m/%Y")} ({dias} dias)
-                    </div>''', unsafe_allow_html=True)
-                c1, c2 = st.columns([1, 1])
-                if c1.button("✏️ Editar", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
-                if c2.button("❌ Excluir", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
-
-    with abas[4]: # Aba de Histórico
-        col_hist1, col_hist2 = st.columns(2)
-        with col_hist1:
-            st.subheader("Produtos")
-            cursor.execute("SELECT nome FROM historico_produtos")
-            for h in cursor.fetchall(): st.write(f"🏷️ {h[0]}")
-        with col_hist2:
-            st.subheader("Marcas")
-            cursor.execute("SELECT nome FROM historico_marcas")
-            for h in cursor.fetchall(): st.write(f"🏢 {h[0]}")
+    produtos = carregar_produtos()
+    
+    # Filtra os produtos com base no texto da busca
+    resultados = [p for p in produtos if busca.lower() in p['nome'].lower()]
+    
+    if busca:
+        st.subheader(f"Resultados encontrados ({len(resultados)})")
+        for item in resultados:
+            dias = (item["validade"] - date.today()).days
+            cor = "#000000" if dias < 0 else ("#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a"))
+            
+            # Formato do card: Nome | Qtd | Local
+            st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: #ffffff; border-radius: 8px; margin-bottom: 8px;">
+                <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} <i>({item["local"]})</i> | 📅 {item["validade"].strftime("%d/%m/%Y")}
+                </div>''', unsafe_html=True)
+            
+            c1, c2 = st.columns([1, 1])
+            if c1.button("✏️ Editar", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
+            if c2.button("❌ Excluir", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
+    else:
+        # Quando não há busca, mostra todos os itens agrupados de forma simples
+        st.info("Digite algo na busca para encontrar itens ou veja o estoque geral abaixo.")
+        for item in produtos:
+            dias = (item["validade"] - date.today()).days
+            cor = "#000000" if dias < 0 else ("#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a"))
+            st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: #ffffff; border-radius: 8px; margin-bottom: 8px;">
+                <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} <i>({item["local"]})</i>
+                </div>''', unsafe_html=True)
