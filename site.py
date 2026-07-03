@@ -13,12 +13,14 @@ cursor = conn.cursor()
 
 # Tabelas e Upgrades
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT)")
+cursor.execute("CREATE TABLE IF NOT EXISTS historico (id INTEGER PRIMARY KEY AUTOINCREMENT, item_nome TEXT UNIQUE, item_marca TEXT)")
+
 for col, tipo in [("marca", "TEXT"), ("quantidade", "REAL DEFAULT 1.0"), ("peso", "REAL DEFAULT 0.0"), ("unidade", "TEXT DEFAULT 'Kg'")]:
     try: cursor.execute(f"ALTER TABLE produtos ADD COLUMN {col} {tipo}")
     except: pass
 conn.commit()
 
-# FUNÇÃO CARREGAR ESTOQUE
+# FUNÇÕES DE CARREGAMENTO
 def carregar_produtos():
     cursor.execute("SELECT id, nome, marca, local, validade, quantidade, peso, unidade FROM produtos")
     return [{
@@ -26,6 +28,10 @@ def carregar_produtos():
         "validade": datetime.strptime(l[4], "%Y-%m-%d").date(),
         "quantidade": l[5], "peso": l[6], "unidade": l[7]
     } for l in cursor.fetchall()]
+
+def carregar_historico():
+    cursor.execute("SELECT DISTINCT item_nome FROM historico ORDER BY item_nome ASC")
+    return [l[0] for l in cursor.fetchall()]
 
 # Estado da sessão
 if "id_edicao" not in st.session_state: st.session_state.id_edicao = None
@@ -41,8 +47,12 @@ with col1:
         st.header("📥 Cadastrar Novo Produto")
         val = {"nome": "", "marca": "", "local": "Geladeira da Cozinha", "quantidade": 1.0, "unidade": "Kg", "peso": 0.0, "validade": date.today()}
 
-    # Formulário
-    nome_f = st.text_input("Nome do Produto:", value=val["nome"])
+    # Formulário com Histórico
+    hist_nomes = carregar_historico()
+    nome_f = st.selectbox("Nome do Produto (Histórico):", options=[""] + hist_nomes, index=0)
+    nome_novo = st.text_input("Ou digite um NOVO nome:", value=val["nome"] if not nome_f else "")
+    nome_final = nome_novo if nome_novo else nome_f
+    
     marca_f = st.text_input("Marca:", value=val["marca"])
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local:", locais, index=locais.index(val["local"]) if val["local"] in locais else 0)
@@ -54,7 +64,8 @@ with col1:
     if st.session_state.id_edicao:
         c1, c2 = st.columns(2)
         if c1.button("💾 Atualizar"):
-            cursor.execute("UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=?, peso=?, unidade=? WHERE id=?", (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f, st.session_state.id_edicao))
+            cursor.execute("UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=?, peso=?, unidade=? WHERE id=?", (nome_final, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f, st.session_state.id_edicao))
+            if nome_final: cursor.execute("INSERT OR IGNORE INTO historico (item_nome) VALUES (?)", (nome_final,))
             conn.commit()
             st.session_state.id_edicao = None
             st.rerun()
@@ -63,7 +74,8 @@ with col1:
             st.rerun()
     else:
         if st.button("🚀 Adicionar"):
-            cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?,?,?,?,?,?,?)", (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f))
+            cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?,?,?,?,?,?,?)", (nome_final, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f))
+            if nome_final: cursor.execute("INSERT OR IGNORE INTO historico (item_nome) VALUES (?)", (nome_final,))
             conn.commit()
             st.rerun()
 
