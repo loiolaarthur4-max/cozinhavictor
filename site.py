@@ -1,13 +1,12 @@
 import streamlit as st
 from datetime import datetime, date
 import sqlite3
-from streamlit_barcode_scanner import scan_barcode
 
 # Configuração da página
 st.set_page_config(page_title="Controle de Validade", page_icon="🍳", layout="wide")
 st.title("🍳 Sistema de Controle da Cozinha")
 
-# Conexão
+# Conexão com banco de dados
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
@@ -15,7 +14,7 @@ cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)
 cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
-# Funções
+# Funções auxiliares
 def para_float(valor):
     try: return float(valor)
     except: return 0.0
@@ -26,41 +25,35 @@ def carregar_produtos():
 
 def renderizar_card(item):
     dias = (item["validade"] - date.today()).days
+    # Cor baseada na urgência: Vermelho (<=3), Laranja (<=7), Verde (>7)
     cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
     
-    st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-        <b>{item["nome"]}</b> | <b>Marca:</b> {item["marca"]} | <b>Local:</b> {item["local"]} | 📅 {dias} dias</div>''', unsafe_allow_html=True)
+    st.markdown(f'''<div style="padding: 15px; background-color: {cor}; color: white; border-radius: 10px; margin-bottom: 10px; border-left: 5px solid rgba(0,0,0,0.2);">
+        <div style="font-size: 1.2em;"><b>{item["nome"]}</b></div>
+        <div style="font-size: 0.9em;">Marca: {item["marca"]} | Local: {item["local"]}</div>
+        <div style="margin-top: 5px; font-weight: bold;">📅 Validade: {dias} dias</div>
+    </div>''', unsafe_allow_html=True)
     
     c1, c2 = st.columns([1, 1])
-    if c1.button("✏️", key=f"e_{item['id']}"): 
+    if c1.button("✏️ Editar", key=f"e_{item['id']}"): 
         st.session_state.edit_data = item
         st.rerun()
-    if c2.button("❌", key=f"d_{item['id']}"): 
+    if c2.button("❌ Excluir", key=f"d_{item['id']}"): 
         cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],))
         conn.commit()
         st.rerun()
 
-# Estado de edição e barcode
+# Estado de edição
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
-if "scanned_barcode" not in st.session_state: st.session_state.scanned_barcode = None
 
-# Sidebar
+# Sidebar (Cadastro e Edição)
 with st.sidebar:
-    st.header("📷 Leitor de Código")
-    if st.button("Abrir Câmera para Escanear"):
-        scanned = scan_barcode()
-        if scanned:
-            st.session_state.scanned_barcode = scanned
-            st.success(f"Código: {scanned}")
-
     is_editing = st.session_state.edit_data is not None
     st.header("✏️ Editar" if is_editing else "📥 Cadastrar")
     d = st.session_state.edit_data if is_editing else {}
     
-    # Campo nome pré-preenchido se algo foi escaneado
-    nome_input = f"Produto {st.session_state.scanned_barcode}" if st.session_state.scanned_barcode else d.get("nome", "")
-    
-    nome_f = st.text_input("Nome do Produto", value=nome_input)
+    # Campos de entrada
+    nome_f = st.text_input("Nome do Produto", value=d.get("nome", ""))
     marca_f = st.text_input("Marca", value=d.get("marca", ""))
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local", locais, index=locais.index(d.get("local", locais[0])) if is_editing and d.get("local") in locais else 0)
@@ -71,20 +64,23 @@ with st.sidebar:
         col1, col2 = st.columns(2)
         if col1.button("💾 Atualizar"):
             cursor.execute("UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=? WHERE id=?", (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, d["id"]))
-            conn.commit(); st.session_state.edit_data = None; st.session_state.scanned_barcode = None; st.rerun()
+            conn.commit(); st.session_state.edit_data = None; st.rerun()
         if col2.button("❌ Cancelar"):
-            st.session_state.edit_data = None; st.session_state.scanned_barcode = None; st.rerun()
+            st.session_state.edit_data = None; st.rerun()
     else:
-        if st.button("🚀 Salvar"):
+        if st.button("🚀 Salvar Produto"):
             cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso) VALUES (?,?,?,?,?,0)", (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f))
-            conn.commit(); st.session_state.scanned_barcode = None; st.rerun()
+            cursor.execute("INSERT OR IGNORE INTO historico_produtos (nome) VALUES (?)", (nome_f,))
+            cursor.execute("INSERT OR IGNORE INTO historico_marcas (nome) VALUES (?)", (marca_f,))
+            conn.commit(); st.rerun()
 
-# Estoque
+# Conteúdo Principal
 st.header("🚨 Estoque")
 busca = st.text_input("🔍 Pesquisar produtos...", placeholder="Digite o nome...")
 produtos = carregar_produtos()
 
 if busca:
+    st.write(f"Resultados para: **{busca}**")
     for item in [p for p in produtos if busca.lower() in p['nome'].lower()]:
         renderizar_card(item)
 else:
@@ -95,6 +91,12 @@ else:
                 renderizar_card(item)
     
     with abas[-1]:
-        st.write("### Produtos Recentes")
-        cursor.execute("SELECT nome FROM historico_produtos")
-        for r in cursor.fetchall(): st.code(r[0])
+        col_h1, col_h2 = st.columns(2)
+        with col_h1:
+            st.subheader("Produtos Cadastrados")
+            cursor.execute("SELECT nome FROM historico_produtos")
+            for r in cursor.fetchall(): st.write(f"- {r[0]}")
+        with col_h2:
+            st.subheader("Marcas Cadastradas")
+            cursor.execute("SELECT nome FROM historico_marcas")
+            for r in cursor.fetchall(): st.write(f"- {r[0]}")
