@@ -14,18 +14,26 @@ st.write("Sistema permanente ativo. Aguardando comandos do cozinheiro **Victor**
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Cria a tabela de produtos
+# 1. Cria a tabela básica se ela não existir
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS produtos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT,
-    marca TEXT,
     local TEXT,
     validade TEXT
 )
 """)
+conn.commit()
 
-# Cria a tabela separada para armazenar o histórico de sugestões
+# 2. SISTEMA AUTOMÁTICO DE UPGRADE: Se a tabela for antiga, adiciona a coluna 'marca' sem quebrar nada
+try:
+    cursor.execute("ALTER TABLE produtos ADD COLUMN marca TEXT")
+    conn.commit()
+except sqlite3.OperationalError:
+    # Se der erro, significa que a coluna 'marca' já existe, então não faz nada!
+    pass
+
+# 3. Cria a tabela separada para armazenar o histórico de sugestões
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS historico (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +53,7 @@ def carregar_produtos():
         lista_produtos.append({
             "nome": linha[0],
             "marca": marca_produto,
-            "local": linha[2],  # LINHA CORRIGIDA AQUI! Sem erros de sintaxe.
+            "local": linha[2],
             "validade": datetime.strptime(linha[3], "%Y-%m-%d").date()
         })
     return lista_produtos
@@ -76,11 +84,9 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.header("📥 Cadastrar Novo Produto")
     
-    # Busca o histórico atualizado do banco de dados
     lista_sugestoes_nome = carregar_historico_nomes()
     lista_sugestoes_marca = carregar_historico_marcas()
     
-    # Caixinha de entrada com histórico integrado
     nome = st.selectbox(
         "Nome do Alimento / Bebida (Selecione do histórico):",
         options=[""] + lista_sugestoes_nome,
@@ -90,7 +96,6 @@ with col1:
     nome_novo = st.text_input("Ou digite um NOVO nome:")
     nome_final = nome_novo.strip() if nome_novo else nome
     
-    # Caixa de Marca com histórico em scroll
     marca = st.selectbox(
         "Marca do Produto (Selecione do histórico):",
         options=[""] + lista_sugestoes_marca,
@@ -112,13 +117,12 @@ with col1:
         if nome_final:
             data_texto = data_val.strftime("%Y-%m-%d")
             
-            # 1. Salva permanentemente no estoque atual
+            # Salva na tabela com a nova coluna incluída
             cursor.execute(
                 "INSERT INTO produtos (nome, marca, local, validade) VALUES (?, ?, ?, ?)", 
                 (nome_final, marca_final, local, data_texto)
             )
             
-            # 2. Salva inteligentemente no Histórico (INSERT OR IGNORE evita duplicados)
             cursor.execute(
                 "INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", 
                 (nome_final, marca_final)
@@ -136,7 +140,6 @@ with col1:
 with col2:
     st.header("🚨 Alarmes e Estoque Atual")
     
-    # LÓGICA DO BOTÃO DESFAZER
     if st.session_state.backup_produtos is not None:
         tempo_passado = time.time() - st.session_state.tempo_limpeza
         tempo_restante = int(10 - tempo_passado)
