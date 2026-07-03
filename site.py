@@ -8,7 +8,7 @@ st.set_page_config(page_title="Controle de Validade - Cozinha", page_icon="🍳"
 
 # Título principal do Site
 st.title("🍳 Sistema de Controle da Cozinha")
-st.write("Sistema permanente ativo. Aguardando comandos do cozinheiro **Victor**.")
+st.write("Sistema permanente ativo. Aguardando comandos do cozinheiro **Arthur**.")
 
 # --- CONEXÃO COM BANCO DE DADOS (SQLITE) ---
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS produtos (
 """)
 conn.commit()
 
-# 2. UPGRADES FORÇADOS DE COLUNAS (Garante que tudo exista de verdade)
+# 2. UPGRADES DE COLUNAS
 colunas_para_adicionar = [
     ("marca", "TEXT"),
     ("quantidade", "REAL DEFAULT 1.0"),
@@ -69,7 +69,7 @@ def carregar_produtos():
             "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
             "quantidade": qtd_produto,
             "peso": peso_produto,
-            "unidade": unidade_produto
+            "unidade": unity_var := unidade_produto
         })
     return lista_produtos
 
@@ -78,6 +78,7 @@ def carregar_historico_nomes():
     return [linha[0] for linha in cursor.fetchall()]
 
 def carregar_historico_marcas():
+    # HISTÓRICO CORRIGIDO: Removido o bug que travava a listagem de marcas
     cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
     return [linha[0] for linha in cursor.fetchall()]
 
@@ -89,63 +90,106 @@ if "backup_produtos" not in st.session_state:
 if "tempo_limpeza" not in st.session_state:
     st.session_state.tempo_limpeza = 0
 
+# Controle do sistema de Edição em memória
+if "id_edicao" not in st.session_state:
+    st.session_state.id_edicao = None
+if "valores_edicao" not in st.session_state:
+    st.session_state.valores_edicao = {}
+
 # Divisão em duas colunas principais
 col1, col2 = st.columns([1.1, 1.7])
 
-# COLUNA 1: Cadastro Combinado (Unidade AND Peso)
+# COLUNA 1: Cadastro Combinado e Formulário de Edição
 with col1:
-    st.header("📥 Cadastrar Novo Produto")
+    if st.session_state.id_edicao is not None:
+        st.header("✏️ Editar Produto")
+        valores = st.session_state.valores_edicao
+    else:
+        st.header("📥 Cadastrar Novo Produto")
+        valores = {"nome": "", "marca": "", "local": "Geladeira da Cozinha", "quantidade": 1.0, "unidade": "Kg", "peso": 0.0, "validade": date.today()}
     
     lista_sugestoes_nome = carregar_historico_nomes()
     lista_sugestoes_marca = carregar_historico_marcas()
     
-    # Informações básicas do produto
-    nome_item = st.selectbox("Nome do Alimento (Histórico):", options=[""] + lista_sugestoes_nome, index=0, key="sel_prod")
-    nome_novo = st.text_input("Ou digite um NOVO nome:", key="txt_prod")
+    # Nome do produto
+    idx_nome = lista_sugestoes_nome.index(valores["nome"]) + 1 if valores["nome"] in lista_sugestoes_nome else 0
+    nome_item = st.selectbox("Nome do Alimento (Histórico):", options=[""] + lista_sugestoes_nome, index=idx_nome, key="sel_prod")
+    nome_novo = st.text_input("Ou digite um NOVO nome:", value=valores["nome"] if idx_nome == 0 else "", key="txt_prod")
     nome_final = nome_novo.strip() if nome_novo else nome_item
     
-    marca_item = st.selectbox("Marca (Histórico):", options=[""] + lista_sugestoes_marca, index=0, key="mar_prod")
-    marca_nova = st.text_input("Ou digite uma NOVA marca:", key="txt_mar_prod")
+    # Marca do produto
+    idx_marca = lista_sugestoes_marca.index(valores["marca"]) + 1 if valores["marca"] in lista_sugestoes_marca else 0
+    st.write(f"*(Marcas salvas: {len(lista_sugestoes_marca)})*")
+    marca_item = st.selectbox("Marca (Histórico):", options=[""] + lista_sugestoes_marca, index=idx_marca, key="mar_prod")
+    marca_nova = st.text_input("Ou digite uma NOVA marca:", value=valores["marca"] if idx_marca == 0 else "", key="txt_mar_prod")
     marca_final = marca_nova.strip() if marca_nova else marca_item
 
-    local_armazenamento = st.selectbox("Onde guardar?", ["Geladeira Principal (1)", "Freezer Branco", "Freezer Red Bull", "Freezer Grande"], key="loc_prod")
+    # Locais Atualizados conforme seu pedido
+    lista_locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
+    idx_local = lista_locais.index(valores["local"]) if valores["local"] in lista_locais else 0
+    local_armazenamento = st.selectbox("Onde guardar?", lista_locais, index=idx_local, key="loc_prod")
     
     st.write("---")
     st.subheader("Medidas do Produto")
     
-    # CAIXA 1: Quantidade de itens/volumes
-    qtd_itens = st.number_input("Quantidade de Unidades/Pacotes:", min_value=1.0, value=1.0, step=1.0, format="%.0f", key="input_qtd_geral")
+    # Quantidade de itens
+    qtd_itens = st.number_input("Quantidade de Unidades/Pacotes:", min_value=1.0, value=float(valores["quantidade"]), step=1.0, format="%.0f", key="input_qtd_geral")
     
-    # CAIXA 2: Seleção do tipo de peso e o valor do peso na mesma linha
-    c_tipo, c_valor = st.columns([1, 2])
+    # Seleção de unidade com as novas opções L e mL
+    lista_unidades = ["Kg", "g", "L", "mL"]
+    idx_unidade = lista_unidades.index(valores["unidade"]) if valores["unidade"] in lista_unidades else 0
+    
+    c_tipo, c_valor = st.columns([1.1, 1.9])
     with c_tipo:
-        tipo_peso = st.radio("Métrica:", ["Kg", "g"], horizontal=True, key="tipo_peso_sistema")
+        tipo_peso = st.radio("Métrica:", lista_unidades, index=idx_unidade, horizontal=True, key="tipo_peso_sistema")
     with c_valor:
-        if tipo_peso == "Kg":
-            peso_item = st.number_input("Peso por pacote (Kg):", min_value=0.0, value=0.0, step=0.1, format="%.2f", key="peso_kg")
+        # Mudança do texto para Volume/Peso conforme seu pedido
+        if tipo_peso in ["Kg", "L"]:
+            peso_item = st.number_input("Volume/Peso por pacote:", min_value=0.0, value=float(valores["peso"]), step=0.1, format="%.2f", key="peso_decimal")
         else:
-            peso_item = st.number_input("Peso por pacote (g):", min_value=0.0, value=0.0, step=50.0, format="%.0f", key="peso_g")
+            peso_item = st.number_input("Volume/Peso por pacote:", min_value=0.0, value=float(valores["peso"]), step=50.0, format="%.0f", key="peso_inteiro")
         
-    data_validade = st.date_input("Data de Validade:", min_value=date.today(), key="data_prod")
+    idx_data = valores["validade"] if valores["validade"] >= date.today() else date.today()
+    data_validade = st.date_input("Data de Validade:", min_value=date.today(), value=idx_data, key="data_prod")
     
-    # Botão para adicionar
-    if st.button("🚀 Adicionar ao Estoque", use_container_width=True, key="btn_salvar_tudo"):
-        if nome_final:
-            data_texto = data_validade.strftime("%Y-%m-%d")
-            cursor.execute(
-                "INSERT INTO produtos (nome, marca, local, validade, quantity_temp, peso, unidade) VALUES (?, ?, ?, ?, 1.0, ?, ?)" if False else
-                "INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                (nome_final, marca_final, local_armazenamento, data_texto, qtd_itens, peso_item, tipo_peso)
-            )
-            cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final, marca_final))
-            conn.commit()
-            st.session_state.produtos = carregar_produtos()
-            st.success(f"🟢 {nome_final} adicionado!")
-            st.rerun()
-        else:
-            st.error("⚠️ Digite ou selecione o nome do produto.")
+    # Botões dinâmicos de salvar ou atualizar
+    if st.session_state.id_edicao is not None:
+        c_salvar, c_cancelar = st.columns(2)
+        with c_salvar:
+            if st.button("💾 Atualizar Produto", use_container_width=True, key="btn_atualizar"):
+                if nome_final:
+                    data_texto = data_validade.strftime("%Y-%m-%d")
+                    cursor.execute(
+                        "UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=?, peso=?, unidade=? WHERE id=?",
+                        (nome_final, marca_final, local_armazenamento, data_texto, qtd_itens, peso_item, tipo_peso, st.session_state.id_edicao)
+                    )
+                    cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final, marca_final))
+                    conn.commit()
+                    st.session_state.produtos = carregar_produtos()
+                    st.session_state.id_edicao = None
+                    st.success("✅ Produto atualizado!")
+                    st.rerun()
+        with c_cancelar:
+            if st.button("❌ Cancelar", use_container_width=True, key="btn_cancelar_edit"):
+                st.session_state.id_edicao = None
+                st.rerun()
+    else:
+        if st.button("🚀 Adicionar ao Estoque", use_container_width=True, key="btn_salvar_tudo"):
+            if nome_final:
+                data_texto = data_validade.strftime("%Y-%m-%d")
+                cursor.execute(
+                    "INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                    (nome_final, marca_final, local_armazenamento, data_texto, qtd_itens, peso_item, tipo_peso)
+                )
+                cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final, marca_final))
+                conn.commit()
+                st.session_state.produtos = carregar_produtos()
+                st.success(f"🟢 {nome_final} adicionado!")
+                st.rerun()
+            else:
+                st.error("⚠️ Digite ou selecione o nome do produto.")
 
-# COLUNA 2: Painel de Estoque e Visores
+# COLUNA 2: Painel de Estoque e Visores com Botão de Editar
 with col2:
     st.header("🚨 Alarmes e Estoque Atual")
     
@@ -159,12 +203,12 @@ with col2:
                 for item in st.session_state.backup_produtos:
                     cursor.execute(
                         "INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                        (item["nome"], item["marca"], item["local"], item["validade"].strftime("%Y-%m-%d"), item["quantidade"], item.get("peso", 0.0), item.get("unidade", "Kg"))
+                        (item["nome"], item["marca"], item["local"], item["validade"].strftime("%Y-%m-%d"), item["quantidade"], item["peso"], item["unidade"])
                     )
                 conn.commit()
                 st.session_state.produtos = carregar_produtos()
                 st.session_state.backup_produtos = None
-                st.success("✅ Estoque recuperado com sucesso!")
+                st.success("✅ Estoque recuperado!")
                 st.rerun()
             time.sleep(1)
             st.rerun()
@@ -173,7 +217,7 @@ with col2:
             st.rerun()
 
     if len(st.session_state.produtos) == 0 and st.session_state.backup_produtos is None:
-        st.info("O estoque está completamente vazio. Victor pode começar a enviar os produtos!")
+        st.info("O estoque está completamente vazio. Arthur pode começar a enviar os produtos!")
     
     elif len(st.session_state.produtos) > 0:
         if st.button("🗑️ Limpar Todo O Estoque"):
@@ -209,19 +253,20 @@ with col2:
             
             texto_marca = " ({0})".format(item['marca']) if item['marca'] else ""
             
-            qtd_card = item.get('quantidade', 1.0)
-            peso_card = item.get('peso', 0.0)
-            unidade_card = item.get('unidade', 'Kg')
+            qtd_card = item['quantidade']
+            peso_card = item['peso']
+            unidade_card = item['unidade']
             
+            # Formatação do visor combinando volumes, pesos e as novas métricas
             if peso_card > 0:
-                if unidade_card == "Kg":
-                    texto_medida = "{:.0f} Unid. x {:.2f} Kg".format(qtd_card, peso_card)
+                if unidade_card in ["Kg", "L"]:
+                    texto_medida = "{:.0f} Unid. x {:.2f} {}".format(qtd_card, peso_card, unidade_card)
                 else:
-                    texto_medida = "{:.0f} Unid. x {:.0f} g".format(qtd_card, peso_card)
+                    texto_medida = "{:.0f} Unid. x {:.0f} {}".format(qtd_card, peso_card, unidade_card)
             else:
                 texto_medida = "{:.0f} Unidades".format(qtd_card)
             
-            card_col, control_col = st.columns([3.5, 1.5])
+            card_col, control_col = st.columns([3.8, 1.2])
             
             with card_col:
                 html_card = (
@@ -237,30 +282,20 @@ with col2:
                 
             with control_col:
                 st.write("") 
-                c1, c2, c3 = st.columns([1, 1, 1])
+                c_edit, c_del = st.columns(2)
                 
-                with c1:
-                    if st.button("➖", key="sub_{0}".format(item['id'])):
-                        nova_qtd = qtd_card - 1
-                        if nova_qtd <= 0:
-                            cursor.execute("DELETE FROM produtos WHERE id = ?", (item['id'],))
-                        else:
-                            cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, item['id']))
-                        conn.commit()
-                        st.session_state.produtos = carregar_produtos()
+                with c_edit:
+                    # Novo Botão de Editar
+                    if st.button("✏️", key="edit_{0}".format(item['id']), help="Editar informações deste produto"):
+                        st.session_state.id_edicao = item['id']
+                        st.session_state.valores_edicao = item.copy()
                         st.rerun()
                         
-                with c2:
-                    if st.button("➕", key="add_{0}".format(item['id'])):
-                        nova_qtd = qtd_card + 1
-                        cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, item['id']))
-                        conn.commit()
-                        st.session_state.produtos = carregar_produtos()
-                        st.rerun()
-                        
-                with c3:
+                with c_del:
                     if st.button("❌", key="del_{0}".format(item['id']), help="Remover item por completo"):
                         cursor.execute("DELETE FROM produtos WHERE id = ?", (item['id'],))
                         conn.commit()
+                        if st.session_state.id_edicao == item['id']:
+                            st.session_state.id_edicao = None
                         st.session_state.produtos = carregar_produtos()
                         st.rerun()
