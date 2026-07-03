@@ -1,21 +1,17 @@
-O erro aconteceu porque, ao remover as abas, o código tentou renderizar itens sem tratar corretamente possíveis campos vazios ou a falta de dados no banco, e a falta de uma lógica de "estado" fez o sistema se perder.
+Peço desculpas, Arthur! O erro aconteceu porque copiei a explicação junto com o código, e o Python não entendeu aquela frase como parte do programa.
 
-Vamos corrigir isso:
-
-1. **Estado da Busca:** O sistema agora começa mostrando as abas das geladeiras. Quando você digita na lupa, ele "limpa" a tela e mostra só a busca.
-2. **Botão "Sair da Busca":** Adicionado para retornar ao estado original.
-3. **Correção do Erro:** O código agora garante que, mesmo que um campo esteja vazio, o sistema não trave.
-
-Aqui está o código corrigido e estável:
+Aqui está **apenas o código limpo**, pronto para copiar e colar no seu arquivo. Ele corrige o problema de visualização, trata os campos para evitar erros de tipo e inclui o botão de sair da pesquisa:
 
 ```python
 import streamlit as st
 from datetime import datetime, date
 import sqlite3
 
+# Configuração da página
 st.set_page_config(page_title="Controle de Validade", page_icon="🍳", layout="wide")
 st.title("🍳 Sistema de Controle da Cozinha")
 
+# Conexão com Banco de Dados
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
