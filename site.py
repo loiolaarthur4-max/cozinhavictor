@@ -57,13 +57,13 @@ def carregar_produtos():
     for linha in linhas:
         marca_produto = linha[2] if linha[2] else ""
         qtd_produto = linha[5] if (len(linha) > 5 and linha[5] is not None) else 1.0
-        unidade_produto = linha[6] if (len(linha) > 6 and linha[6]) else "Unidades" # LINHA TOTALMENTE CORRIGIDA
+        unidade_produto = linha[6] if (len(linha) > 6 and linha[6]) else "Unidades"
         
         lista_produtos.append({
             "id": linha[0],
             "nome": linha[1],
             "marca": marca_produto,
-            "local": linha[3],
+            "local": Henry_loc_item := linha[3],
             "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
             "quantidade": qtd_produto,
             "unidade": unidade_produto
@@ -145,9 +145,10 @@ with col1:
 
         local_peso = st.selectbox("Onde guardar?", ["Geladeira Principal (1)", "Freezer Branco", "Freezer Red Bull", "Freezer Grande"], key="loc_peso")
         
-        unidade_peso = st.radio("Escolha a unidade de peso:", ["Kg", "g"], horizontal=True, key="rad_peso")
+        # Botão de seleção para Victor escolher se quer salvar em Kg ou g
+        unidade_peso_escolhida = st.radio("Escolha a unidade de medida:", ["Kg", "g"], horizontal=True, key="escolha_unidade_peso")
         
-        if unidade_peso == "Kg":
+        if unidade_peso_escolhida == "Kg":
             qtd_peso = st.number_input("Peso em Quilos (Ex: 1.50):", min_value=0.01, value=1.0, step=0.1, format="%.2f", key="num_kg")
         else:
             qtd_peso = st.number_input("Peso em Gramas (Ex: 500):", min_value=1.0, value=500.0, step=50.0, format="%.0f", key="num_g")
@@ -157,14 +158,15 @@ with col1:
         if st.button("Adicionar Peso ao Estoque", key="btn_cad_peso"):
             if nome_final_peso:
                 data_texto = data_val_peso.strftime("%Y-%m-%d")
+                # AQUI ESTÁ CORRIGIDO: Salvando a unidade_peso_escolhida ("Kg" ou "g") direto no banco!
                 cursor.execute(
                     "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)", 
-                    (nome_final_peso, marca_final_peso, local_peso, data_texto, qtd_peso, unidade_peso)
+                    (nome_final_peso, marca_final_peso, local_peso, data_texto, qtd_peso, unidade_peso_escolhida)
                 )
                 cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final_peso, marca_final_peso))
                 conn.commit()
                 st.session_state.produtos = carregar_produtos()
-                st.success(f"🟢 {nome_final_peso} adicionado!")
+                st.success(f"🟢 {nome_final_peso} adicionado com peso correto!")
                 st.rerun()
             else:
                 st.error("⚠️ Digite ou selecione o nome do produto.")
@@ -227,7 +229,7 @@ with col2:
                 cor_alarme = "#d97706"
                 cor_fundo = "#fef3c7"
             else:
-                status_texto = "✅ Seguro ({0} dias restantes定)".format(dias_restantes)
+                status_texto = "✅ Seguro ({0} dias restantes)".format(dias_restantes)
                 cor_alarme = "#16a34a"
                 cor_fundo = "#dcfce7"
             
