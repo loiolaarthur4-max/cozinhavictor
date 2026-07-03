@@ -54,7 +54,7 @@ def carregar_produtos():
     cursor.execute("SELECT id, nome, marca, local, validade, quantidade, unidade FROM produtos")
     linhas = cursor.fetchall()
     lista_produtos = []
-    for linha in pipelines := linhas:
+    for linha in linhas: # LINHA CORRIGIDA (Removido pipelines :=)
         marca_produto = linha[2] if linha[2] else ""
         qtd_produto = linha[5] if (len(linha) > 5 and linha[5] is not None) else 1.0
         unidade_produto = linha[6] if (len(linha) > 6 and linha[6]) else "Unidades"
@@ -118,7 +118,7 @@ with col1:
         key="tipo_unidade_medida"
     )
     
-    # Campo 2: Caixa numérica dinâmica que se adapta à escolha do Victor
+    # Campo 2: Caixa numérica dinâmica que se adapta à escolha
     if unidade_selecionada == "Kg":
         qtd_final = st.number_input("Digite o peso em Quilos (Ex: 1.50):", min_value=0.01, value=1.0, step=0.1, format="%.2f", key="input_kg")
     elif unidade_selecionada == "g":
