@@ -12,8 +12,6 @@ cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)
 cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
-# ... (funções carregar_produtos e para_float permanecem iguais) ...
-
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
     return [{"id": l[0], "nome": l[1] or "", "local": l[2] or "", "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4] or "", "quantidade": l[5] or 0.0, "peso": l[6] or 0.0, "unidade": l[7] or ""} for l in cursor.fetchall()]
@@ -29,7 +27,6 @@ with col1:
 
     nome_final = st.text_input("Nome do Produto", value=d.get("nome", ""))
     marca_final = st.text_input("Marca", value=d.get("marca", ""))
-    # ... (restante do form de cadastro) ...
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local", locais, index=locais.index(d["local"]) if is_editing and d.get("local") in locais else 0)
     qtd_f = st.number_input("Quantidade", value=float(d.get("quantidade", 1.0)))
@@ -48,4 +45,42 @@ with col1:
         if st.button("🚀 Salvar"):
             cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?,?,?,?,?,?,?)", (nome_final, marca_final, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f))
             cursor.execute("INSERT OR IGNORE INTO historico_produtos (nome) VALUES (?)", (nome_final,))
-            cursor
+            cursor.execute("INSERT OR IGNORE INTO historico_marcas (nome) VALUES (?)", (marca_final,))
+            conn.commit(); st.rerun()
+
+with col2:
+    st.header("🚨 Estoque")
+    busca = st.text_input("🔍 Pesquisar...", placeholder="Digite para filtrar...")
+    produtos = carregar_produtos()
+
+    if busca:
+        if st.button("⬅️ Sair da Pesquisa"): st.rerun()
+        resultados = [p for p in produtos if busca.lower() in p['nome'].lower()]
+        st.subheader(f"Resultados ({len(resultados)})")
+        for item in resultados:
+            cor = "#ef4444" if (item["validade"] - date.today()).days <= 3 else "#16a34a"
+            st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
+                <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} ({item["local"]})</div>''', unsafe_allow_html=True)
+    else:
+        abas = st.tabs(locais + ["📜 Histórico"])
+        for i, local in enumerate(locais):
+            with abas[i]:
+                for item in [p for p in produtos if p['local'] == local]:
+                    cor = "#ef4444" if (item["validade"] - date.today()).days <= 3 else "#16a34a"
+                    st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
+                        <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]}</div>''', unsafe_allow_html=True)
+                    c1, c2 = st.columns([1, 1])
+                    if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
+                    if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
+        
+        with abas[-1]: # Aba de Histórico
+            st.subheader("Registros Salvos (Clique no ícone de copiar no canto da caixa)")
+            h1, h2 = st.columns(2)
+            with h1:
+                st.write("**Produtos:**")
+                cursor.execute("SELECT nome FROM historico_produtos")
+                for r in cursor.fetchall(): st.code(r[0], language=None)
+            with h2:
+                st.write("**Marcas:**")
+                cursor.execute("SELECT nome FROM historico_marcas")
+                for r in cursor.fetchall(): st.code(r[0], language=None)
