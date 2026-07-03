@@ -2,11 +2,9 @@ import streamlit as st
 from datetime import datetime, date
 import sqlite3
 
-# Configuração da página
 st.set_page_config(page_title="Controle de Validade", page_icon="🍳", layout="wide")
 st.title("🍳 Sistema de Controle da Cozinha")
 
-# Conexão com Banco de Dados
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
@@ -14,20 +12,18 @@ cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)
 cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
-# Função de segurança para números
 def para_float(valor):
     try: return float(valor) if valor is not None else 0.0
     except: return 0.0
 
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
-    return [{"id": l[0], "nome": l[1] or "", "local": l[2] or "", "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4] or "", "quantidade": l[5] or 0.0, "peso": l[6] or 0.0, "unidade": l[7] or ""} for l in cursor.fetchall()]
+    return [{"id": l[0], "nome": str(l[1] or ""), "local": str(l[2] or ""), "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": str(l[4] or ""), "quantidade": para_float(l[5]), "peso": para_float(l[6]), "unidade": str(l[7] or "")} for l in cursor.fetchall()]
 
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
 col1, col2 = st.columns([1, 2])
 
-# Coluna 1: Cadastro/Edição
 with col1:
     is_editing = st.session_state.edit_data is not None
     st.header("✏️ Editar" if is_editing else "📥 Cadastrar")
@@ -56,7 +52,6 @@ with col1:
             cursor.execute("INSERT OR IGNORE INTO historico_marcas (nome) VALUES (?)", (marca_final,))
             conn.commit(); st.rerun()
 
-# Coluna 2: Estoque e Histórico
 with col2:
     st.header("🚨 Estoque")
     busca = st.text_input("🔍 Pesquisar...", placeholder="Digite para filtrar...")
@@ -65,7 +60,6 @@ with col2:
     if busca:
         if st.button("⬅️ Sair da Pesquisa"): st.rerun()
         resultados = [p for p in produtos if busca.lower() in p['nome'].lower()]
-        st.subheader(f"Resultados ({len(resultados)})")
         for item in resultados:
             cor = "#ef4444" if (item["validade"] - date.today()).days <= 3 else "#16a34a"
             st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
@@ -82,22 +76,19 @@ with col2:
                     if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
                     if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
         
-        with abas[-1]: # Aba de Histórico
-            st.subheader("Registros Salvos")
+        with abas[-1]:
             h1, h2 = st.columns(2)
             with h1:
                 st.write("**Produtos:**")
                 cursor.execute("SELECT nome FROM historico_produtos")
                 for r in cursor.fetchall():
-                    c_col, c_del = st.columns([4, 1])
-                    c_col.code(r[0], language=None)
-                    if c_del.button("❌", key=f"del_p_{r[0]}"):
-                        cursor.execute("DELETE FROM historico_produtos WHERE nome=?", (r[0],)); conn.commit(); st.rerun()
+                    c_c, c_d = st.columns([3, 1])
+                    c_c.code(r[0] or "")
+                    if c_d.button("❌", key=f"del_p_{r[0]}"): cursor.execute("DELETE FROM historico_produtos WHERE nome=?", (r[0],)); conn.commit(); st.rerun()
             with h2:
                 st.write("**Marcas:**")
                 cursor.execute("SELECT nome FROM historico_marcas")
                 for r in cursor.fetchall():
-                    c_col, c_del = st.columns([4, 1])
-                    c_col.code(r[0], language=None)
-                    if c_del.button("❌", key=f"del_m_{r[0]}"):
-                        cursor.execute("DELETE FROM historico_marcas WHERE nome=?", (r[0],)); conn.commit(); st.rerun()
+                    c_c, c_d = st.columns([3, 1])
+                    c_c.code(r[0] or "")
+                    if c_d.button("❌", key=f"del_m_{r[0]}"): cursor.execute("DELETE FROM historico_marcas WHERE nome=?", (r[0],)); conn.commit(); st.rerun()
