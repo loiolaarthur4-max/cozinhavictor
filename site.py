@@ -51,19 +51,24 @@ conn.commit()
 
 # FUNÇÃO PARA CARREGAR PRODUTOS DO ESTOQUE
 def carregar_produtos():
+    # Puxamos todas as colunas necessárias com segurança
     cursor.execute("SELECT id, nome, marca, local, validade, quantidade, unidade FROM produtos")
     linhas = cursor.fetchall()
     lista_produtos = []
     for linha in linhas:
+        # Cria o dicionário garantindo que nenhuma chave fique vazia para evitar o KeyError
         marca_produto = linha[2] if linha[2] else ""
+        qtd_produto = linha[5] if (len(linha) > 5 and linha[5] is not None) else 1.0
+        unidade_produto = linha[6] if (len(linha) > 6 and linha[6]) else "Unidades"
+        
         lista_produtos.append({
             "id": linha[0],
-            "nome": linha[1], # LINHA CORRIGIDA
-            "marca": marca_produto, # LINHA CORRIGIDA
+            "nome": linha[1],
+            "marca": marca_produto,
             "local": linha[3],
             "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
-            "quantidade": linha[5] if linha[5] is not None else 1.0,
-            "unidade": linha[6] if linha[6] else "Unidades"
+            "quantidade": qtd_produto,
+            "unidade": unidade_produto
         })
     return lista_produtos
 
@@ -73,7 +78,7 @@ def carregar_historico_nomes():
 
 def carregar_historico_marcas():
     cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
-    return [linha[0] for linha in cursor.fetchall()]
+    return [linha[0] for inline_linha in cursor.fetchall()]
 
 if "produtos" not in st.session_state:
     st.session_state.produtos = carregar_produtos()
@@ -202,12 +207,16 @@ with col2:
             
             texto_marca = " ({0})".format(item['marca']) if item['marca'] else ""
             
-            if item['unidade'] == "Kg":
-                texto_qtd = "{:.2f} Kg".format(item['quantidade'])
-            elif item['unidade'] == "g":
-                texto_qtd = "{:.0f} g".format(item['quantidade'])
+            # Checagem extra de segurança para a exibição de texto
+            unidade_card = item.get('unidade', 'Unidades')
+            qtd_card = item.get('quantidade', 1.0)
+            
+            if unidade_card == "Kg":
+                texto_qtd = "{:.2f} Kg".format(qtd_card)
+            elif unidade_card == "g":
+                texto_qtd = "{:.0f} g".format(qtd_card)
             else:
-                texto_qtd = "{:.0f} Unid.".format(item['quantidade'])
+                texto_qtd = "{:.0f} Unid.".format(qtd_card)
             
             card_col, control_col = st.columns([3.5, 1.5])
             
@@ -227,11 +236,11 @@ with col2:
                 st.write("") 
                 c1, c2, c3 = st.columns([1, 1, 1])
                 
-                passo = 0.1 if item['unidade'] == "Kg" else (50.0 if item['unidade'] == "g" else 1.0)
+                passo = 0.1 if unidade_card == "Kg" else (50.0 if unidade_card == "g" else 1.0)
                 
                 with c1:
                     if st.button("➖", key="sub_{0}".format(item['id'])):
-                        nova_qtd = item['quantidade'] - passo
+                        nova_qtd = qtd_card - passo
                         if nova_qtd <= 0:
                             cursor.execute("DELETE FROM produtos WHERE id = ?", (item['id'],))
                         else:
@@ -242,7 +251,7 @@ with col2:
                         
                 with c2:
                     if st.button("➕", key="add_{0}".format(item['id'])):
-                        nova_qtd = item['quantidade'] + passo
+                        nova_qtd = qtd_card + passo
                         cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, item['id']))
                         conn.commit()
                         st.session_state.produtos = carregar_produtos()
