@@ -51,12 +51,10 @@ conn.commit()
 
 # FUNÇÃO PARA CARREGAR PRODUTOS DO ESTOQUE
 def carregar_produtos():
-    # Puxamos todas as colunas necessárias com segurança
     cursor.execute("SELECT id, nome, marca, local, validade, quantidade, unidade FROM produtos")
     linhas = cursor.fetchall()
     lista_produtos = []
     for linha in linhas:
-        # Cria o dicionário garantindo que nenhuma chave fique vazia para evitar o KeyError
         marca_produto = linha[2] if linha[2] else ""
         qtd_produto = linha[5] if (len(linha) > 5 and linha[5] is not None) else 1.0
         unidade_produto = linha[6] if (len(linha) > 6 and linha[6]) else "Unidades"
@@ -78,7 +76,8 @@ def carregar_historico_nomes():
 
 def carregar_historico_marcas():
     cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
-    return [linha[0] for inline_linha in cursor.fetchall()]
+    # LINHA CORRIGIDA: Agora está usando 'linha' corretamente no laço!
+    return [linha[0] for linha in cursor.fetchall()]
 
 if "produtos" not in st.session_state:
     st.session_state.produtos = carregar_produtos()
@@ -207,7 +206,6 @@ with col2:
             
             texto_marca = " ({0})".format(item['marca']) if item['marca'] else ""
             
-            # Checagem extra de segurança para a exibição de texto
             unidade_card = item.get('unidade', 'Unidades')
             qtd_card = item.get('quantidade', 1.0)
             
