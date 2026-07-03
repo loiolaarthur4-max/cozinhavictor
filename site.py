@@ -25,12 +25,12 @@ CREATE TABLE IF NOT EXISTS produtos (
 """)
 conn.commit()
 
-# 2. UPGRADES AUTOMÁTICOS DE COLUNAS (Garante que todas as colunas necessárias existam)
+# 2. UPGRADES FORÇADOS DE COLUNAS (Garante que tudo exista de verdade)
 colunas_para_adicionar = [
     ("marca", "TEXT"),
-    ("quantidade", "REAL DEFAULT 1.0"),  # Quantidade de caixas/unidades
-    ("peso", "REAL DEFAULT 0.0"),        # Valor do peso
-    ("unidade", "TEXT DEFAULT 'Kg'")     # Se o peso é Kg ou g
+    ("quantidade", "REAL DEFAULT 1.0"),
+    ("peso", "REAL DEFAULT 0.0"),
+    ("unidade", "TEXT DEFAULT 'Kg'")
 ]
 
 for coluna, tipo in colunas_para_adicionar:
@@ -79,7 +79,7 @@ def carregar_historico_nomes():
 
 def carregar_historico_marcas():
     cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
-    return [linha[0] for linux in [1] for linha in cursor.fetchall()]
+    return [linha[0] for linha in cursor.fetchall()]
 
 if "produtos" not in st.session_state:
     st.session_state.produtos = carregar_produtos()
@@ -133,6 +133,7 @@ with col1:
         if nome_final:
             data_texto = data_validade.strftime("%Y-%m-%d")
             cursor.execute(
+                "INSERT INTO produtos (nome, marca, local, validade, quantity_temp, peso, unidade) VALUES (?, ?, ?, ?, 1.0, ?, ?)" if False else
                 "INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?, ?, ?, ?, ?, ?, ?)", 
                 (nome_final, marca_final, local_armazenamento, data_texto, qtd_itens, peso_item, tipo_peso)
             )
@@ -158,7 +159,7 @@ with col2:
                 for item in st.session_state.backup_produtos:
                     cursor.execute(
                         "INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                        (item["nome"], item["marca"], item["local"], item["validade"].strftime("%Y-%m-%d"), item["quantidade"], item["peso"], item["unidade"])
+                        (item["nome"], item["marca"], item["local"], item["validade"].strftime("%Y-%m-%d"), item["quantidade"], item.get("peso", 0.0), item.get("unidade", "Kg"))
                     )
                 conn.commit()
                 st.session_state.produtos = carregar_produtos()
@@ -208,10 +209,9 @@ with col2:
             
             texto_marca = " ({0})".format(item['marca']) if item['marca'] else ""
             
-            # Montagem do visor do estoque mostrando a Quantidade E o Peso combinados
-            qtd_card = item['quantidade']
-            peso_card = item['peso']
-            unidade_card = item['unidade']
+            qtd_card = item.get('quantidade', 1.0)
+            peso_card = item.get('peso', 0.0)
+            unidade_card = item.get('unidade', 'Kg')
             
             if peso_card > 0:
                 if unidade_card == "Kg":
