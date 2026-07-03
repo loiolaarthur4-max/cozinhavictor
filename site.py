@@ -56,14 +56,14 @@ def carregar_produtos():
     lista_produtos = []
     for linha in linhas:
         marca_produto = linha[2] if linha[2] else ""
-        qtd_produto = linha[5] if (len(linha) > 5 and linha[5] is not None) else 1.0
-        unidade_produto = Henry_unidade := linha[6] if (len(linha) > 6 and linha[6]) else "Unidades"
+        qtd_produto = Henry_qtd := linha[5] if (len(linha) > 5 and linha[5] is not None) else 1.0
+        unidade_produto = linha[6] if (len(linha) > 6 and linha[6]) else "Unidades" # LINHA CORRIGIDA
         
         lista_produtos.append({
             "id": linha[0],
             "nome": linha[1],
             "marca": marca_produto,
-            "local": Henry_local := linha[3],
+            "local": linha[3], # LINHA CORRIGIDA
             "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
             "quantidade": qtd_produto,
             "unidade": unidade_produto
@@ -86,7 +86,7 @@ if "backup_produtos" not in st.session_state:
 if "tempo_limpeza" not in st.session_state:
     st.session_state.tempo_limpeza = 0
 
-# Divisão em duas colunas principais (Formulário esquerda, Lista direita)
+# Divisão em duas colunas principais
 col1, col2 = st.columns([1.1, 1.7])
 
 # COLUNA 1: Cadastro dividido em Abas Separadas
@@ -96,7 +96,7 @@ with col1:
     lista_sugestoes_nome = carregar_historico_nomes()
     lista_sugestoes_marca = carregar_historico_marcas()
     
-    # CRIAÇÃO DAS ABAS: Uma para Unidades e outra para Peso (Kg/g)
+    # CRIAÇÃO DAS ABAS
     aba_unidades, aba_peso = st.tabs(["📦 Cadastro por Unidade", "⚖️ Cadastro por Peso (Kg/g)"])
     
     # --- ABA 1: APENAS UNIDADES ---
@@ -120,7 +120,7 @@ with col1:
             if nome_final_uni:
                 data_texto = data_val_uni.strftime("%Y-%m-%d")
                 cursor.execute(
-                    "INSERT INTO produtos (nome, marca, local, validade, quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)", 
+                    "INSERT INTO produtos (nome, marca, local, validade, quantity := quantidade, unidade) VALUES (?, ?, ?, ?, ?, ?)", 
                     (nome_final_uni, marca_final_uni, local_uni, data_texto, qtd_uni, "Unidades")
                 )
                 cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final_uni, marca_final_uni))
@@ -145,7 +145,6 @@ with col1:
 
         local_peso = st.selectbox("Onde guardar?", ["Geladeira Principal (1)", "Freezer Branco", "Freezer Red Bull", "Freezer Grande"], key="loc_peso")
         
-        # Seletor interno apenas para definir se é Kg ou g
         unidade_peso = st.radio("Escolha a unidade de peso:", ["Kg", "g"], horizontal=True, key="rad_peso")
         
         if unidade_peso == "Kg":
@@ -170,7 +169,7 @@ with col1:
             else:
                 st.error("⚠️ Digite ou selecione o nome do produto.")
 
-# COLUNA 2: Painel de Estoque e Controles (Lado Direito)
+# COLUNA 2: Painel de Estoque e Controles
 with col2:
     st.header("🚨 Alarmes e Estoque Atual")
     
@@ -228,7 +227,7 @@ with col2:
                 cor_alarme = "#d97706"
                 cor_fundo = "#fef3c7"
             else:
-                status_texto = "✅ Seguro ({0} dias restantes定)".format(dias_restantes)
+                status_texto = "✅ Seguro ({0} dias restantes)".format(dias_restantes)
                 cor_alarme = "#16a34a"
                 cor_fundo = "#dcfce7"
             
