@@ -12,10 +12,6 @@ cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)
 cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
-def para_float(valor):
-    try: return float(valor) if valor is not None else 0.0
-    except: return 0.0
-
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
     return [{"id": l[0], "nome": l[1] or "", "local": l[2] or "", "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4] or "", "quantidade": l[5] or 0.0, "peso": l[6] or 0.0, "unidade": l[7] or ""} for l in cursor.fetchall()]
@@ -34,10 +30,10 @@ with col1:
     
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local", locais, index=locais.index(d["local"]) if is_editing and d.get("local") in locais else 0)
-    qtd_f = st.number_input("Quantidade", value=para_float(d.get("quantidade", 1.0)))
+    qtd_f = st.number_input("Quantidade", value=float(d.get("quantidade", 1.0)))
     unidades = ["Kg", "g", "L", "mL"]
     unid_f = st.selectbox("Unidade", unidades, index=unidades.index(d.get("unidade", "Kg")) if is_editing and d.get("unidade") in unidades else 0)
-    peso_f = st.number_input("Peso/Volume", value=para_float(d.get("peso", 0.0)))
+    peso_f = st.number_input("Peso/Volume", value=float(d.get("peso", 0.0)))
     data_f = st.date_input("Validade", value=d.get("validade", date.today()))
 
     if is_editing:
@@ -72,10 +68,7 @@ with col2:
             st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
                 <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} ({item["local"]})</div>''', unsafe_allow_html=True)
     else:
-        # Criando abas para as geladeiras + a aba do histórico
         abas = st.tabs(locais + ["📜 Histórico"])
-        
-        # Exibindo geladeiras
         for i, local in enumerate(locais):
             with abas[i]:
                 for item in [p for p in produtos if p['local'] == local]:
@@ -86,15 +79,14 @@ with col2:
                     if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
                     if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
         
-        # Exibindo Histórico na última aba
-        with abas[-1]:
+        with abas[-1]: # Aba de Histórico
             st.subheader("Registros Salvos")
             h1, h2 = st.columns(2)
             with h1:
                 st.write("**Produtos:**")
                 cursor.execute("SELECT nome FROM historico_produtos")
-                for r in cursor.fetchall(): st.write(f"• {r[0]}")
+                for r in cursor.fetchall(): st.write(f"🏷️ {r[0]}")
             with h2:
                 st.write("**Marcas:**")
                 cursor.execute("SELECT nome FROM historico_marcas")
-                for r in cursor.fetchall(): st.write(f"• {r[0]}")
+                for r in cursor.fetchall(): st.write(f"🏢 {r[0]}")
