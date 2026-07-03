@@ -12,11 +12,8 @@ cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)
 cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
-# Função robusta para converter qualquer entrada (strings decimais ou números)
 def para_float(valor):
     try:
-        if isinstance(valor, str):
-            valor = valor.replace(',', '.')
         return float(valor) if valor is not None else 0.0
     except: return 0.0
 
@@ -37,13 +34,9 @@ with col1:
     marca_final = st.text_input("Marca", value=d.get("marca", ""))
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     local_f = st.selectbox("Local", locais, index=locais.index(d["local"]) if is_editing and d.get("local") in locais else 0)
-    
-    # Inputs numéricos usando a função de limpeza
     qtd_f = st.number_input("Quantidade", value=para_float(d.get("quantidade", 1.0)), step=0.1)
-    
     unidades = ["Kg", "g", "L", "mL"]
     unid_f = st.selectbox("Unidade", unidades, index=unidades.index(d.get("unidade", "Kg")) if is_editing and d.get("unidade") in unidades else 0)
-    
     peso_f = st.number_input("Peso/Volume", value=para_float(d.get("peso", 0.0)), step=0.1)
     data_f = st.date_input("Validade", value=d.get("validade", date.today()))
 
@@ -67,19 +60,23 @@ with col2:
 
     if busca:
         if st.button("⬅️ Sair da Pesquisa"): st.rerun()
-        resultados = [p for p in produtos if busca.lower() in p['nome'].lower()]
-        for item in resultados:
-            cor = "#ef4444" if (item["validade"] - date.today()).days <= 3 else "#16a34a"
+        for item in [p for p in produtos if busca.lower() in p['nome'].lower()]:
+            dias = (item["validade"] - date.today()).days
+            alerta = "⚠️ " if dias <= 3 else ""
+            cor = "#ef4444" if dias <= 3 else "#16a34a"
             st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                <b>{item["nome"]}</b> - {item["quantidade"]} {item["unidade"]} ({item["local"]})</div>''', unsafe_allow_html=True)
+                {alerta}<b>{item["nome"]}</b> - {item["quantidade"]:g} {item["unidade"]} ({item["local"]})</div>''', unsafe_allow_html=True)
     else:
         abas = st.tabs(locais + ["📜 Histórico"])
         for i, local in enumerate(locais):
             with abas[i]:
                 for item in [p for p in produtos if p['local'] == local]:
-                    cor = "#ef4444" if (item["validade"] - date.today()).days <= 3 else "#16a34a"
+                    dias = (item["validade"] - date.today()).days
+                    alerta = "⚠️ " if dias <= 3 else ""
+                    cor = "#ef4444" if dias <= 3 else "#16a34a"
+                    # O formato :g remove os zeros decimais desnecessários
                     st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                        <b>{item["nome"]}</b> - {item["quantidade"]} {item["unidade"]}</div>''', unsafe_allow_html=True)
+                        {alerta}<b>{item["nome"]}</b> - {item["quantidade"]:g} {item["unidade"]}</div>''', unsafe_allow_html=True)
                     c1, c2 = st.columns([1, 1])
                     if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
                     if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
