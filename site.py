@@ -27,13 +27,15 @@ def renderizar_card(item):
     dias = (item["validade"] - date.today()).days
     cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
     
-    # FORÇA A EXIBIÇÃO: Remove o "---" e mostra o valor que estiver no banco
-    # Isso vai te mostrar exatamente o que está gravado.
+    # LÓGICA REVISADA: Se o peso for <= 0, o texto fica vazio
     p = float(item['peso'])
-    peso_str = f"{p:.1f} {item['unidade']}"
+    if p > 0:
+        peso_str = f"| <b>Peso:</b> {int(p) if p.is_integer() else p} {item['unidade']}"
+    else:
+        peso_str = ""
     
     st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-        <b>{item["nome"]}</b> | <b>Marca:</b> {item["marca"]} | <b>Local:</b> {item["local"]} | <b>Peso:</b> {peso_str} | 📅 {dias} dias</div>''', unsafe_allow_html=True)
+        <b>{item["nome"]}</b> | <b>Marca:</b> {item["marca"]} | <b>Local:</b> {item["local"]} {peso_str} | 📅 {dias} dias</div>''', unsafe_allow_html=True)
     
     c1, c2 = st.columns([1, 1])
     if c1.button("✏️", key=f"e_{item['id']}"): 
@@ -47,7 +49,7 @@ def renderizar_card(item):
 # Estado de edição
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
-# Sidebar (Cadastro/Edição)
+# Sidebar
 with st.sidebar:
     is_editing = st.session_state.edit_data is not None
     st.header("✏️ Editar" if is_editing else "📥 Cadastrar")
@@ -60,8 +62,7 @@ with st.sidebar:
     qtd_f = st.number_input("Quantidade", value=para_float(d.get("quantidade", 1.0)), step=1.0)
     unidades = ["Kg", "g", "L", "mL"]
     unid_f = st.selectbox("Unidade de Medida", unidades, index=unidades.index(d.get("unidade", "Kg")) if is_editing and d.get("unidade") in unidades else 0)
-    # AQUI: Mudamos para exibir o valor real do banco
-    peso_f = st.number_input("Peso/Volume", value=para_float(d.get("peso", 0.0)), step=0.1, format="%.1f")
+    peso_f = st.number_input("Peso/Volume", value=para_float(d.get("peso", 0.0)), step=0.1)
     data_f = st.date_input("Validade", value=d.get("validade", date.today()))
 
     if is_editing:
@@ -75,7 +76,7 @@ with st.sidebar:
             cursor.execute("INSERT OR IGNORE INTO historico_marcas (nome) VALUES (?)", (marca_f,))
             conn.commit(); st.rerun()
 
-# Estoque e Pesquisa
+# Estoque
 st.header("🚨 Estoque")
 busca = st.text_input("🔍 Pesquisar produtos...", placeholder="Digite o nome...")
 produtos = carregar_produtos()
