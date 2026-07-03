@@ -41,12 +41,11 @@ def carregar_produtos():
     linhas = cursor.fetchall()
     lista_produtos = []
     for linha in linhas:
-        # Garante que se a marca for antiga/nula, não quebre o código
         marca_produto = linha[1] if linha[1] else ""
         lista_produtos.append({
             "nome": linha[0],
             "marca": marca_produto,
-            "local": Henry_local := linha[2],
+            "local": linha[2],  # LINHA CORRIGIDA AQUI! Sem erros de sintaxe.
             "validade": datetime.strptime(linha[3], "%Y-%m-%d").date()
         })
     return lista_produtos
@@ -58,7 +57,7 @@ def carregar_historico_nomes():
 
 # FUNÇÃO PARA PEGAR AS MARCAS JÁ CADASTRADAS NO HISTÓRICO
 def carregar_historico_marcas():
-    cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
+    cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
     return [linha[0] for linha in cursor.fetchall()]
 
 if "produtos" not in st.session_state:
@@ -81,24 +80,21 @@ with col1:
     lista_sugestoes_nome = carregar_historico_nomes()
     lista_sugestoes_marca = carregar_historico_marcas()
     
-    # Caixinha de entrada com histórico integrado (st.selectbox com opção de digitar)
+    # Caixinha de entrada com histórico integrado
     nome = st.selectbox(
-        "Nome do Alimento / Bebida (Digite ou selecione do histórico):",
+        "Nome do Alimento / Bebida (Selecione do histórico):",
         options=[""] + lista_sugestoes_nome,
-        index=0,
-        placeholder="Ex: Presunto, Leite, Queijo..."
+        index=0
     )
     
-    # Se ele preferir digitar um nome totalmente novo que não está no histórico:
-    nome_novo = st.text_input("Ou digite um NOVO nome caso não esteja no histórico acima:")
+    nome_novo = st.text_input("Ou digite um NOVO nome:")
     nome_final = nome_novo.strip() if nome_novo else nome
     
-    # Aba/Caixinha de Marca também com histórico em scroll
+    # Caixa de Marca com histórico em scroll
     marca = st.selectbox(
-        "Marca do Produto (Digite ou selecione do histórico):",
+        "Marca do Produto (Selecione do histórico):",
         options=[""] + lista_sugestoes_marca,
-        index=0,
-        placeholder="Ex: Seara, Nestlé, Itambé..."
+        index=0
     )
     marca_nova = st.text_input("Ou digite uma NOVA marca:")
     marca_final = marca_nova.strip() if marca_nova else marca
@@ -116,13 +112,13 @@ with col1:
         if nome_final:
             data_texto = data_val.strftime("%Y-%m-%d")
             
-            # 1. Salva permanentemente na tabela de estoque atual
+            # 1. Salva permanentemente no estoque atual
             cursor.execute(
                 "INSERT INTO produtos (nome, marca, local, validade) VALUES (?, ?, ?, ?)", 
                 (nome_final, marca_final, local, data_texto)
             )
             
-            # 2. Salva inteligentemente no Histórico para aparecer nas próximas vezes
+            # 2. Salva inteligentemente no Histórico (INSERT OR IGNORE evita duplicados)
             cursor.execute(
                 "INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", 
                 (nome_final, marca_final)
@@ -131,12 +127,12 @@ with col1:
             
             st.session_state.produtos = carregar_produtos()
             st.session_state.backup_produtos = None 
-            st.success("🟢 {0} adicionado e salvo no histórico!".format(nome_final))
+            st.success("🟢 {0} adicionado com sucesso!".format(nome_final))
             st.rerun()
         else:
             st.error("⚠️ Por favor, selecione ou digite o nome do produto.")
 
-# COLUNA 2: Painel de Alarmes e Visualização
+# COLUNA 2: O painel de Alarmes Automáticos
 with col2:
     st.header("🚨 Alarmes e Estoque Atual")
     
@@ -189,7 +185,7 @@ with col2:
                 cor_alarme = "#ef4444"
                 cor_fundo = "#fee2e2"
             elif dias_restantes <= 3:
-                status_texto = "🚨 CRÍTICO! Vence in {0} dias.".format(dias_restantes)
+                status_texto = "🚨 CRÍTICO! Vence em {0} dias.".format(dias_restantes)
                 cor_alarme = "#dc2626"
                 cor_fundo = "#fee2e2"
             elif dias_restantes <= 7:
@@ -201,7 +197,6 @@ with col2:
                 cor_alarme = "#16a34a"
                 cor_fundo = "#dcfce7"
             
-            # Exibe o Nome e a Marca destacados no Card
             texto_marca = " ({0})".format(item['marca']) if item['marca'] else ""
             
             html_card = (
