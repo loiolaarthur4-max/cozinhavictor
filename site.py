@@ -57,10 +57,10 @@ def carregar_produtos():
     for linha in linhas:
         marca_produto = linha[2] if linha[2] else ""
         qtd_produto = linha[5] if (len(linha) > 5 and linha[5] is not None) else 1.0
-        unidade_produto = Henry_unidade_nova := linha[6] if (len(linha) > 6 and linha[6]) else "Unidades"
+        unidade_produto = linha[6] if (len(linha) > 6 and linha[6]) else "Unidades" # LINHA TOTALMENTE CORRIGIDA
         
         lista_produtos.append({
-            "id": linha[0], # LINHA CORRIGIDA (Removido Henry_id_item :=)
+            "id": linha[0],
             "nome": linha[1],
             "marca": marca_produto,
             "local": linha[3],
@@ -227,7 +227,7 @@ with col2:
                 cor_alarme = "#d97706"
                 cor_fundo = "#fef3c7"
             else:
-                status_texto = "✅ Seguro ({0} dias restantes)".format(dias_restantes)
+                status_texto = "✅ Seguro ({0} dias restantes定)".format(dias_restantes)
                 cor_alarme = "#16a34a"
                 cor_fundo = "#dcfce7"
             
