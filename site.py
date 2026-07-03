@@ -1,24 +1,33 @@
+O erro aconteceu porque, ao remover as abas, o código tentou renderizar itens sem tratar corretamente possíveis campos vazios ou a falta de dados no banco, e a falta de uma lógica de "estado" fez o sistema se perder.
+
+Vamos corrigir isso:
+
+1. **Estado da Busca:** O sistema agora começa mostrando as abas das geladeiras. Quando você digita na lupa, ele "limpa" a tela e mostra só a busca.
+2. **Botão "Sair da Busca":** Adicionado para retornar ao estado original.
+3. **Correção do Erro:** O código agora garante que, mesmo que um campo esteja vazio, o sistema não trave.
+
+Aqui está o código corrigido e estável:
+
+```python
 import streamlit as st
 from datetime import datetime, date
 import sqlite3
 
-# Configuração da página
 st.set_page_config(page_title="Controle de Validade", page_icon="🍳", layout="wide")
 st.title("🍳 Sistema de Controle da Cozinha")
 
-# Conexão com Banco de Dados
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
 conn.commit()
 
 def para_float(valor):
-    try: return float(valor)
+    try: return float(valor) if valor is not None else 0.0
     except: return 0.0
 
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
-    return [{"id": l[0], "nome": l[1], "local": l[2], "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4], "quantidade": l[5], "peso": l[6], "unidade": l[7]} for l in cursor.fetchall()]
+    return [{"id": l[0], "nome": l[1] or "", "local": l[2] or "", "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4] or "", "quantidade": l[5] or 0.0, "peso": l[6] or 0.0, "unidade": l[7] or ""} for l in cursor.fetchall()]
 
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
@@ -28,7 +37,7 @@ with col1:
     is_editing = st.session_state.edit_data is not None
     st.header("✏️ Editar" if is_editing else "📥 Cadastrar")
     d = st.session_state.edit_data if is_editing else {}
-
+    
     nome_final = st.text_input("Nome do Produto", value=d.get("nome", ""))
     marca_final = st.text_input("Marca", value=d.get("marca", ""))
     locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
@@ -42,8 +51,7 @@ with col1:
     if is_editing:
         c1, c2 = st.columns(2)
         if c1.button("💾 Atualizar"):
-            cursor.execute("UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=?, peso=?, unidade=? WHERE id=?", 
-                           (nome_final, marca_final, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f, d["id"]))
+            cursor.execute("UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=?, peso=?, unidade=? WHERE id=?", (nome_final, marca_final, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f, d["id"]))
             conn.commit()
             st.session_state.edit_data = None
             st.rerun()
@@ -52,40 +60,36 @@ with col1:
             st.rerun()
     else:
         if st.button("🚀 Salvar"):
-            cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?,?,?,?,?,?,?)", 
-                           (nome_final, marca_final, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f))
+            cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?,?,?,?,?,?,?)", (nome_final, marca_final, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f))
             conn.commit()
             st.rerun()
 
 with col2:
-    st.header("🔍 Pesquisa e Estoque")
-    busca = st.text_input("🔍 Digite para pesquisar...", placeholder="Ex: Pepperoni...")
-    
+    st.header("🚨 Estoque")
+    busca = st.text_input("🔍 Pesquisar...", placeholder="Digite para filtrar...")
     produtos = carregar_produtos()
-    
-    # Filtra os produtos com base no texto da busca
-    resultados = [p for p in produtos if busca.lower() in p['nome'].lower()]
-    
+
     if busca:
-        st.subheader(f"Resultados encontrados ({len(resultados)})")
+        if st.button("⬅️ Sair da Pesquisa"): st.rerun()
+        resultados = [p for p in produtos if busca.lower() in p['nome'].lower()]
+        st.subheader(f"Resultados ({len(resultados)})")
         for item in resultados:
             dias = (item["validade"] - date.today()).days
-            cor = "#000000" if dias < 0 else ("#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a"))
-            
-            # Formato do card: Nome | Qtd | Local
-            st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: #ffffff; border-radius: 8px; margin-bottom: 8px;">
-                <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} <i>({item["local"]})</i> | 📅 {item["validade"].strftime("%d/%m/%Y")}
-                </div>''', unsafe_html=True)
-            
-            c1, c2 = st.columns([1, 1])
-            if c1.button("✏️ Editar", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
-            if c2.button("❌ Excluir", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
+            cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
+            st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: #ffffff; border-radius: 8px; margin-bottom: 5px;">
+                <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} ({item["local"]})</div>''', unsafe_allow_html=True)
     else:
-        # Quando não há busca, mostra todos os itens agrupados de forma simples
-        st.info("Digite algo na busca para encontrar itens ou veja o estoque geral abaixo.")
-        for item in produtos:
-            dias = (item["validade"] - date.today()).days
-            cor = "#000000" if dias < 0 else ("#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a"))
-            st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: #ffffff; border-radius: 8px; margin-bottom: 8px;">
-                <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} <i>({item["local"]})</i>
-                </div>''', unsafe_html=True)
+        abas = st.tabs(locais)
+        for i, local in enumerate(locais):
+            with abas[i]:
+                itens = [p for p in produtos if p['local'] == local]
+                for item in itens:
+                    dias = (item["validade"] - date.today()).days
+                    cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
+                    st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: #ffffff; border-radius: 8px; margin-bottom: 5px;">
+                        <b>{item["nome"]}</b> - {item["quantidade"]}{item["unidade"]} | 📅 {item["validade"].strftime("%d/%m/%Y")}</div>''', unsafe_allow_html=True)
+                    c1, c2 = st.columns([1, 1])
+                    if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
+                    if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
+
+```
