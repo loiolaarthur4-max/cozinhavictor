@@ -13,16 +13,28 @@ cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)
 cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
-# Funções
+# Controle de estado para a câmera
+if "camera_ativa" not in st.session_state:
+    st.session_state.camera_ativa = False
+
+def alternar_camera():
+    st.session_state.camera_ativa = not st.session_state.camera_ativa
+
+# Funções de busca e renderização
 def carregar_produtos():
     cursor.execute("SELECT * FROM produtos")
     return [{"id": l[0], "nome": l[1], "local": l[2], "validade": datetime.strptime(l[3], "%Y-%m-%d").date(), "marca": l[4], "quantidade": l[5]} for l in cursor.fetchall()]
 
 # Sidebar
 with st.sidebar:
-    st.header("📷 Scanner de Referência")
-    foto = st.camera_input("Escanear Código (Foto)")
+    st.header("📷 Scanner")
+    if st.button("🔌 Ligar/Desligar Câmera"):
+        alternar_camera()
     
+    if st.session_state.camera_ativa:
+        st.camera_input("Foto para referência", key="scanner_foto")
+    
+    st.markdown("---")
     st.header("📥 Cadastrar Produto")
     nome_f = st.text_input("Nome do Produto")
     marca_f = st.text_input("Marca")
@@ -34,10 +46,8 @@ with st.sidebar:
     if st.button("🚀 Salvar"):
         cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade) VALUES (?,?,?,?,?)", 
                        (nome_f, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f))
-        cursor.execute("INSERT OR IGNORE INTO historico_produtos (nome) VALUES (?)", (nome_f,))
-        cursor.execute("INSERT OR IGNORE INTO historico_marcas (nome) VALUES (?)", (marca_f,))
         conn.commit()
-        st.success("Salvo com sucesso!")
+        st.success("Salvo!")
         st.rerun()
 
 # Conteúdo Principal
@@ -71,4 +81,4 @@ else:
     with abas[-1]:
         st.write("### Histórico de Cadastros")
         cursor.execute("SELECT nome FROM historico_produtos")
-        for r in cursor.fetchall(): st.code(r[0])
+        for r in cursor.fetchall(): st.write(f"- {r[0]}")
