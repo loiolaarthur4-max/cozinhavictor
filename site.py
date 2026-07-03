@@ -69,7 +69,7 @@ def carregar_produtos():
             "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
             "quantidade": qtd_produto,
             "peso": peso_produto,
-            "unidade": unity_var := unidade_produto
+            "unidade": unidade_produto # LINHA CORRIGIDA AQUI!
         })
     return lista_produtos
 
@@ -78,7 +78,6 @@ def carregar_historico_nomes():
     return [linha[0] for linha in cursor.fetchall()]
 
 def carregar_historico_marcas():
-    # HISTÓRICO CORRIGIDO: Removido o bug que travava a listagem de marcas
     cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL AND item_marca != '' ORDER BY item_marca ASC")
     return [linha[0] for linha in cursor.fetchall()]
 
@@ -124,7 +123,7 @@ with col1:
     marca_nova = st.text_input("Ou digite uma NOVA marca:", value=valores["marca"] if idx_marca == 0 else "", key="txt_mar_prod")
     marca_final = marca_nova.strip() if marca_nova else marca_item
 
-    # Locais Atualizados conforme seu pedido
+    # Locais Atualizados
     lista_locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
     idx_local = lista_locais.index(valores["local"]) if valores["local"] in lista_locais else 0
     local_armazenamento = st.selectbox("Onde guardar?", lista_locais, index=idx_local, key="loc_prod")
@@ -143,7 +142,6 @@ with col1:
     with c_tipo:
         tipo_peso = st.radio("Métrica:", lista_unidades, index=idx_unidade, horizontal=True, key="tipo_peso_sistema")
     with c_valor:
-        # Mudança do texto para Volume/Peso conforme seu pedido
         if tipo_peso in ["Kg", "L"]:
             peso_item = st.number_input("Volume/Peso por pacote:", min_value=0.0, value=float(valores["peso"]), step=0.1, format="%.2f", key="peso_decimal")
         else:
@@ -167,7 +165,7 @@ with col1:
                     conn.commit()
                     st.session_state.produtos = carregar_produtos()
                     st.session_state.id_edicao = None
-                    st.success("✅ Produto atualizado!")
+                    st.success("✅ Produto updated!")
                     st.rerun()
         with c_cancelar:
             if st.button("❌ Cancelar", use_container_width=True, key="btn_cancelar_edit"):
@@ -257,7 +255,6 @@ with col2:
             peso_card = item['peso']
             unidade_card = item['unidade']
             
-            # Formatação do visor combinando volumes, pesos e as novas métricas
             if peso_card > 0:
                 if unidade_card in ["Kg", "L"]:
                     texto_medida = "{:.0f} Unid. x {:.2f} {}".format(qtd_card, peso_card, unidade_card)
@@ -285,7 +282,6 @@ with col2:
                 c_edit, c_del = st.columns(2)
                 
                 with c_edit:
-                    # Novo Botão de Editar
                     if st.button("✏️", key="edit_{0}".format(item['id']), help="Editar informações deste produto"):
                         st.session_state.id_edicao = item['id']
                         st.session_state.valores_edicao = item.copy()
