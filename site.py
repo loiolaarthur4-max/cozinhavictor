@@ -11,97 +11,49 @@ st.write("Sistema permanente ativo. Aguardando comandos do cozinheiro **Victor**
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Tabelas e Upgrades
-cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT)")
-cursor.execute("CREATE TABLE IF NOT EXISTS historico (id INTEGER PRIMARY KEY AUTOINCREMENT, item_nome TEXT UNIQUE, item_marca TEXT)")
-
-for col, tipo in [("marca", "TEXT"), ("quantidade", "REAL DEFAULT 1.0"), ("peso", "REAL DEFAULT 0.0"), ("unidade", "TEXT DEFAULT 'Kg'")]:
-    try: cursor.execute(f"ALTER TABLE produtos ADD COLUMN {col} {tipo}")
-    except: pass
+# Garantir estrutura das tabelas
+cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
+cursor.execute("CREATE TABLE IF NOT EXISTS historico (id INTEGER PRIMARY KEY AUTOINCREMENT, item_nome TEXT, item_marca TEXT UNIQUE)")
 conn.commit()
 
-# FUNÇÕES DE CARREGAMENTO
+# Funções auxiliares
 def carregar_produtos():
     cursor.execute("SELECT id, nome, marca, local, validade, quantidade, peso, unidade FROM produtos")
-    return [{
-        "id": l[0], "nome": l[1], "marca": l[2] or "", "local": l[3],
-        "validade": datetime.strptime(l[4], "%Y-%m-%d").date(),
-        "quantidade": l[5], "peso": l[6], "unidade": l[7]
-    } for l in cursor.fetchall()]
+    return [{"id": l[0], "nome": l[1], "marca": l[2], "local": l[3], "validade": datetime.strptime(l[4], "%Y-%m-%d").date(), "quantidade": l[5], "peso": l[6], "unidade": l[7]} for l in cursor.fetchall()]
 
-def carregar_historico():
-    cursor.execute("SELECT DISTINCT item_nome FROM historico ORDER BY item_nome ASC")
+def carregar_historico_marcas():
+    cursor.execute("SELECT DISTINCT item_marca FROM historico WHERE item_marca IS NOT NULL")
     return [l[0] for l in cursor.fetchall()]
 
-# Estado da sessão
+# Lógica principal de edição
 if "id_edicao" not in st.session_state: st.session_state.id_edicao = None
-if "valores_edicao" not in st.session_state: st.session_state.valores_edicao = {}
 
-col1, col2 = st.columns([1.1, 1.7])
+col1, col2 = st.columns([1, 2])
 
 with col1:
-    if st.session_state.id_edicao is not None:
-        st.header("✏️ Editar Produto")
-        val = st.session_state.valores_edicao
-    else:
-        st.header("📥 Cadastrar Novo Produto")
-        val = {"nome": "", "marca": "", "local": "Geladeira da Cozinha", "quantidade": 1.0, "unidade": "Kg", "peso": 0.0, "validade": date.today()}
+    st.header("Cadastrar/Editar")
+    # Formulário simplificado que garante a exibição do nome
+    nome_input = st.text_input("Nome do Produto")
+    marca_input = st.text_input("Marca")
+    local_input = st.selectbox("Local", ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"])
+    qtd_input = st.number_input("Quantidade", value=1.0)
+    unid_input = st.selectbox("Unidade", ["Kg", "g", "L", "mL"])
+    peso_input = st.number_input("Peso/Volume", value=0.0)
+    data_input = st.date_input("Validade")
 
-    # Formulário com Histórico
-    hist_nomes = carregar_historico()
-    nome_f = st.selectbox("Nome do Produto (Histórico):", options=[""] + hist_nomes, index=0)
-    nome_novo = st.text_input("Ou digite um NOVO nome:", value=val["nome"] if not nome_f else "")
-    nome_final = nome_novo if nome_novo else nome_f
-    
-    marca_f = st.text_input("Marca:", value=val["marca"])
-    locais = ["Geladeira da Cozinha", "Freezer Branco", "Geladeira Red Bull", "Geladeira Grande"]
-    local_f = st.selectbox("Local:", locais, index=locais.index(val["local"]) if val["local"] in locais else 0)
-    qtd_f = st.number_input("Quantidade:", min_value=1.0, value=float(val["quantidade"]))
-    unid_f = st.radio("Métrica:", ["Kg", "g", "L", "mL"], index=["Kg", "g", "L", "mL"].index(val["unidade"]) if val["unidade"] in ["Kg", "g", "L", "mL"] else 0, horizontal=True)
-    peso_f = st.number_input("Volume/Peso:", value=float(val["peso"]))
-    data_f = st.date_input("Validade:", value=val["validade"])
-
-    if st.session_state.id_edicao:
-        c1, c2 = st.columns(2)
-        if c1.button("💾 Atualizar"):
-            cursor.execute("UPDATE produtos SET nome=?, marca=?, local=?, validade=?, quantidade=?, peso=?, unidade=? WHERE id=?", (nome_final, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f, st.session_state.id_edicao))
-            if nome_final: cursor.execute("INSERT OR IGNORE INTO historico (item_nome) VALUES (?)", (nome_final,))
-            conn.commit()
-            st.session_state.id_edicao = None
-            st.rerun()
-        if c2.button("❌ Cancelar"):
-            st.session_state.id_edicao = None
-            st.rerun()
-    else:
-        if st.button("🚀 Adicionar"):
-            cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?,?,?,?,?,?,?)", (nome_final, marca_f, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f))
-            if nome_final: cursor.execute("INSERT OR IGNORE INTO historico (item_nome) VALUES (?)", (nome_final,))
-            conn.commit()
-            st.rerun()
+    if st.button("Salvar Produto"):
+        cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?,?,?,?,?,?,?)", 
+                       (nome_input, marca_input, local_input, data_input.strftime("%Y-%m-%d"), qtd_input, peso_input, unid_input))
+        if marca_input: cursor.execute("INSERT OR IGNORE INTO historico (item_marca) VALUES (?)", (marca_input,))
+        conn.commit()
+        st.rerun()
 
 with col2:
-    st.header("🚨 Alarmes e Estoque Atual")
+    st.header("Estoque e Alarmes")
     produtos = carregar_produtos()
     for item in produtos:
-        dias = (item["validade"] - date.today()).days
-        status = "❌ VENCIDO!" if dias < 0 else (f"🚨 CRÍTICO: {dias} dias" if dias <= 3 else (f"⚠️ ATENÇÃO: {dias} dias" if dias <= 7 else f"✅ Seguro ({dias} dias)"))
-        cor = "#ef4444" if dias < 0 or dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
+        # Cálculo dinâmico que atualiza conforme o dia passa
+        dias_restantes = (item["validade"] - date.today()).days
+        status = "Vencido" if dias_restantes < 0 else f"{dias_restantes} dias restantes"
         
-        st.markdown(f"""
-        <div style="border-left: 6px solid {cor}; padding: 10px; background: #f8fafc; margin-bottom: 10px;">
-            <b>{item['nome']}</b> {f'({item['marca']})' if item['marca'] else ''}<br>
-            📦 {item['quantidade']:.0f} Unid x {item['peso']:.2f} {item['unidade']}<br>
-            📍 {item['local']} | 📅 {item['validade'].strftime('%d/%m/%Y')}<br>
-            <b style="color: {cor}">{status}</b>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        c1, c2 = st.columns(2)
-        if c1.button("✏️ Editar", key=f"e{item['id']}"):
-            st.session_state.id_edicao = item['id']
-            st.session_state.valores_edicao = item
-            st.rerun()
-        if c2.button("❌ Excluir", key=f"d{item['id']}"):
-            cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],))
-            conn.commit()
-            st.rerun()
+        st.write(f"**{item['nome']}** | Marca: {item['marca']} | {status}")
