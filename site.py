@@ -10,6 +10,8 @@ st.title("🍳 Sistema de Controle da Cozinha")
 conn = sqlite3.connect("cozinha_permanente.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS produtos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, local TEXT, validade TEXT, marca TEXT, quantidade REAL, peso REAL, unidade TEXT)")
+cursor.execute("CREATE TABLE IF NOT EXISTS historico_produtos (nome TEXT UNIQUE)")
+cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
 def para_float(valor):
@@ -52,6 +54,8 @@ with col1:
     else:
         if st.button("🚀 Salvar"):
             cursor.execute("INSERT INTO produtos (nome, marca, local, validade, quantidade, peso, unidade) VALUES (?,?,?,?,?,?,?)", (nome_final, marca_final, local_f, data_f.strftime("%Y-%m-%d"), qtd_f, peso_f, unid_f))
+            cursor.execute("INSERT OR IGNORE INTO historico_produtos (nome) VALUES (?)", (nome_final,))
+            cursor.execute("INSERT OR IGNORE INTO historico_marcas (nome) VALUES (?)", (marca_final,))
             conn.commit()
             st.rerun()
 
@@ -82,3 +86,18 @@ with col2:
                     c1, c2 = st.columns([1, 1])
                     if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
                     if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
+        
+        # Históricos fixos abaixo das abas de geladeira
+        st.divider()
+        st.subheader("📜 Histórico Geral")
+        h1, h2 = st.columns(2)
+        with h1:
+            st.caption("Produtos Cadastrados")
+            cursor.execute("SELECT nome FROM historico_produtos")
+            produtos_hist = [r[0] for r in cursor.fetchall()]
+            st.write(", ".join(produtos_hist))
+        with h2:
+            st.caption("Marcas Cadastradas")
+            cursor.execute("SELECT nome FROM historico_marcas")
+            marcas_hist = [r[0] for r in cursor.fetchall()]
+            st.write(", ".join(marcas_hist))
