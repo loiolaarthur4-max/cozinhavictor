@@ -13,8 +13,7 @@ cursor.execute("CREATE TABLE IF NOT EXISTS historico_marcas (nome TEXT UNIQUE)")
 conn.commit()
 
 def para_float(valor):
-    try:
-        return float(valor) if valor is not None else 0.0
+    try: return float(valor) if valor is not None else 0.0
     except: return 0.0
 
 def carregar_produtos():
@@ -62,21 +61,19 @@ with col2:
         if st.button("⬅️ Sair da Pesquisa"): st.rerun()
         for item in [p for p in produtos if busca.lower() in p['nome'].lower()]:
             dias = (item["validade"] - date.today()).days
-            alerta = "⚠️ " if dias <= 3 else ""
-            cor = "#ef4444" if dias <= 3 else "#16a34a"
+            cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
             st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                {alerta}<b>{item["nome"]}</b> - {item["quantidade"]:g} {item["unidade"]} ({item["local"]})</div>''', unsafe_allow_html=True)
+                <b>{item["nome"]}</b> ({dias} dias p/ vencer) - {item["quantidade"]:g}{item["unidade"]}</div>''', unsafe_allow_html=True)
     else:
         abas = st.tabs(locais + ["📜 Histórico"])
         for i, local in enumerate(locais):
             with abas[i]:
                 for item in [p for p in produtos if p['local'] == local]:
                     dias = (item["validade"] - date.today()).days
-                    alerta = "⚠️ " if dias <= 3 else ""
-                    cor = "#ef4444" if dias <= 3 else "#16a34a"
-                    # O formato :g remove os zeros decimais desnecessários
+                    # Vermelho p/ < 3, Laranja p/ < 7, Verde resto
+                    cor = "#ef4444" if dias <= 3 else ("#d97706" if dias <= 7 else "#16a34a")
                     st.markdown(f'''<div style="padding: 10px; background-color: {cor}; color: white; border-radius: 8px; margin-bottom: 5px;">
-                        {alerta}<b>{item["nome"]}</b> - {item["quantidade"]:g} {item["unidade"]}</div>''', unsafe_allow_html=True)
+                        <b>{item["nome"]}</b> | 📅 {dias} dias p/ vencer | {item["quantidade"]:g}{item["unidade"]}</div>''', unsafe_allow_html=True)
                     c1, c2 = st.columns([1, 1])
                     if c1.button("✏️", key=f"e_{item['id']}"): st.session_state.edit_data = item; st.rerun()
                     if c2.button("❌", key=f"d_{item['id']}"): cursor.execute("DELETE FROM produtos WHERE id=?", (item['id'],)); conn.commit(); st.rerun()
