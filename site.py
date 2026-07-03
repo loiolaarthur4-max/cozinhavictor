@@ -69,7 +69,7 @@ def carregar_produtos():
             "validade": datetime.strptime(linha[4], "%Y-%m-%d").date(),
             "quantidade": qtd_produto,
             "peso": peso_produto,
-            "unidade": unidade_produto # LINHA CORRIGIDA AQUI!
+            "unidade": unidade_produto
         })
     return lista_produtos
 
@@ -118,7 +118,6 @@ with col1:
     
     # Marca do produto
     idx_marca = lista_sugestoes_marca.index(valores["marca"]) + 1 if valores["marca"] in lista_sugestoes_marca else 0
-    st.write(f"*(Marcas salvas: {len(lista_sugestoes_marca)})*")
     marca_item = st.selectbox("Marca (Histórico):", options=[""] + lista_sugestoes_marca, index=idx_marca, key="mar_prod")
     marca_nova = st.text_input("Ou digite uma NOVA marca:", value=valores["marca"] if idx_marca == 0 else "", key="txt_mar_prod")
     marca_final = marca_nova.strip() if marca_nova else marca_item
@@ -163,13 +162,16 @@ with col1:
                     )
                     cursor.execute("INSERT OR IGNORE INTO historico (item_nome, item_marca) VALUES (?, ?)", (nome_final, marca_final))
                     conn.commit()
+                    
+                    # CORREÇÃO CRÍTICA AQUI: Limpa e força a recarga imediata das informações atualizadas
                     st.session_state.produtos = carregar_produtos()
                     st.session_state.id_edicao = None
-                    st.success("✅ Produto updated!")
+                    st.session_state.valores_edicao = {}
                     st.rerun()
         with c_cancelar:
             if st.button("❌ Cancelar", use_container_width=True, key="btn_cancelar_edit"):
                 st.session_state.id_edicao = None
+                st.session_state.valores_edicao = {}
                 st.rerun()
     else:
         if st.button("🚀 Adicionar ao Estoque", use_container_width=True, key="btn_salvar_tudo"):
@@ -237,7 +239,7 @@ with col2:
                 cor_alarme = "#ef4444"
                 cor_fundo = "#fee2e2"
             elif dias_restantes <= 3:
-                status_texto = "🚨 CRÍTICO! Vence em {0} dias.".format(dias_restantes)
+                status_texto = "🚨 CRÍTICO! Vence in {0} dias.".format(dias_restantes)
                 cor_alarme = "#dc2626"
                 cor_fundo = "#fee2e2"
             elif dias_restantes <= 7:
@@ -293,5 +295,6 @@ with col2:
                         conn.commit()
                         if st.session_state.id_edicao == item['id']:
                             st.session_state.id_edicao = None
+                            st.session_state.valores_edicao = {}
                         st.session_state.produtos = carregar_produtos()
                         st.rerun()
