@@ -4,6 +4,22 @@ import sqlite3
 
 # Configuração da página
 st.set_page_config(page_title="Controle de Validade", page_icon="🍳", layout="wide")
+
+# --- Autenticação ---
+if "autenticado" not in st.session_state: st.session_state.autenticado = False
+
+if not st.session_state.autenticado:
+    st.title("🔒 Acesso Restrito")
+    senha = st.text_input("Digite a senha para acessar o sistema:", type="password")
+    if st.button("Entrar"):
+        if senha == "donviton":
+            st.session_state.autenticado = True
+            st.rerun()
+        else:
+            st.error("Senha incorreta!")
+    st.stop()
+
+# --- Sistema Principal ---
 st.title("🍳 Sistema de Controle da Cozinha")
 
 # Conexão
@@ -42,8 +58,12 @@ def renderizar_card(item):
 # Estado de edição
 if "edit_data" not in st.session_state: st.session_state.edit_data = None
 
-# Sidebar (Cadastro e Edição)
+# Sidebar
 with st.sidebar:
+    if st.button("Sair (Logout)"):
+        st.session_state.autenticado = False
+        st.rerun()
+        
     is_editing = st.session_state.edit_data is not None
     st.header("✏️ Editar" if is_editing else "📥 Cadastrar")
     d = st.session_state.edit_data if is_editing else {}
